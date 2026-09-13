@@ -1,0 +1,33 @@
+UMOWA LICENCYJNA UŻYTKOWNIKA KOŃCOWEGO (EULA) DLA PROGRAMU mkHTML
+
+Prawa autorskie (c) 2026 Krzysztof Markowski
+Wszelkie prawa zastrzeżone.
+
+Prosimy o uważne zapoznanie się z poniższymi warunkami przed uruchomieniem lub użyciem programu mkHTML. Korzystanie z oprogramowania oznacza akceptację niniejszych warunków.
+
+1. POSTANOWIENIA OGÓLNE
+Niniejsza umowa jest prawnie wiążącym porozumieniem między Tobą (użytkownikiem końcowym) a autorem programu, Krzysztofem Markowskim. Program mkHTML jest chroniony prawem autorskim.
+
+2. UDZIELENIE LICENCJI I DOZWOLONY UŻYTEK
+Program mkHTML jest oprogramowaniem darmowym (Freeware) przeznaczonym WYŁĄCZNIE do użytku edukacyjnego i niekomercyjnego.
+Autor udziela bezpłatnego prawa do instalowania, uruchamiania i korzystania z programu dzieciom, uczniom, rodzicom oraz placówkom edukacyjnym (np. szkołom) w celu nauki tworzenia stron WWW, programowania oraz pisania kodu HTML i CSS w prostym i przyjaznym środowisku.
+
+3. OGRANICZENIA I ZAKAZ UŻYTKU KOMERCYJNEGO
+Surowo zabrania się wykorzystywania programu mkHTML w jakichkolwiek celach komercyjnych, zarobkowych lub biznesowych w ramach działalności gospodarczej.
+Ponadto zabrania się:
+a) Sprzedaży, wynajmu lub dzierżawy programu.
+b) Modyfikowania kodu źródłowego, dekompilacji (tzw. reverse engineering) lub tworzenia programów pochodnych na bazie mkHTML.
+c) Usuwania informacji o prawach autorskich z programu.
+
+4. DYSTRYBUCJA
+Program może być swobodnie kopiowany i rozpowszechniany (np. przekazywany innym uczniom, umieszczany na szkolnych dyskach sieciowych lub pendrive'ach) wyłącznie za darmo i w swojej oryginalnej, niezmienionej formie (w postaci oryginalnego archiwum lub skompilowanego folderu).
+
+5. WYŁĄCZENIE ODPOWIEDZIALNOŚCI
+Oprogramowanie jest dostarczane w stanie "takim, w jakim jest" (ang. "as is"), bez jakichkolwiek gwarancji, wyraźnych lub dorozumianych. Autor (Krzysztof Markowski) nie ponosi odpowiedzialności za jakiekolwiek bezpośrednie lub pośrednie szkody, utratę danych czy problemy techniczne wynikające z pobrania, uruchomienia lub użytkowania programu. Użytkownik korzysta z programu na własne ryzyko.
+
+6. ZAKOŃCZENIE LICENCJI
+Złamanie któregokolwiek z powyższych punktów skutkuje natychmiastowym i automatycznym wygaśnięciem niniejszej licencji, co wiąże się z obowiązkiem trwałego usunięcia programu ze wszystkich nośników i urządzeń.
+
+Dziękuję za korzystanie z mkHTML!
+Życzę miłej i owocnej nauki tworzenia stron internetowych.
+Autor: Krzysztof Markowski
