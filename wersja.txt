@@ -2,8 +2,8 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
     # Wersja pliku i produktu (musi składać się z 4 liczb oddzielonych przecinkami)
-    filevers=(0, 0, 1, 1),
-    prodvers=(0, 0, 1, 1),
+    filevers=(0, 0, 2, 1),
+    prodvers=(0, 0, 2, 1),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -18,12 +18,12 @@ VSVersionInfo(
         u'041504b0', # Kod 0415 oznacza język polski
         [StringStruct(u'CompanyName', u'Krzysztof Markowski'),
         StringStruct(u'FileDescription', u'Prosty edytor HTML i CSS'),
-        StringStruct(u'FileVersion', u'0.0.1'),
+        StringStruct(u'FileVersion', u'0.0.2'),
         StringStruct(u'InternalName', u'mkHTML'),
         StringStruct(u'LegalCopyright', u'Krzysztof Markowski'),
         StringStruct(u'OriginalFilename', u'mkEdytor.exe'),
         StringStruct(u'ProductName', u'mkHTML'),
-        StringStruct(u'ProductVersion', u'0.0.1')])
+        StringStruct(u'ProductVersion', u'0.0.2')])
       ]), 
     VarFileInfo([VarStruct(u'Translation', [1045, 1200])]) # 1045 to kod języka polskiego
   ]
