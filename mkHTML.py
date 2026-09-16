@@ -6,22 +6,16 @@ import webbrowser
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QFileDialog, QMessageBox, QTabWidget
 )
-from PyQt6.QtGui import QFont, QAction, QKeySequence, QColor
-from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont, QAction, QKeySequence, QColor, QIcon
+from PyQt6.QtCore import Qt, QUrl, QStandardPaths
 from PyQt6.Qsci import QsciScintilla, QsciLexerHTML, QsciLexerCSS
 
 # --- KONFIGURACJA ŚCIEŻEK I USTAWIEŃ ---
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".mkhtml_config.json")
 
 def get_desktop_path():
-    """Pobiera ścieżkę do Pulpitu, uwzględniając polskie wersje systemu Windows."""
-    home = os.path.expanduser("~")
-    desktop = os.path.join(home, "Desktop")
-    if not os.path.exists(desktop):
-        desktop_pl = os.path.join(home, "Pulpit")
-        if os.path.exists(desktop_pl):
-            return desktop_pl
-    return desktop
+    """Pobiera ścieżkę do Pulpitu za pomocą wbudowanych i bezpiecznych mechanizmów Qt."""
+    return QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DesktopLocation)
 
 def load_config():
     """Wczytuje konfigurację (katalog roboczy, położenie i rozmiar okna)."""
@@ -53,6 +47,11 @@ def load_config():
             for key in ["x", "y", "width", "height"]:
                 if key not in config or not isinstance(config[key], int):
                     config[key] = default_config[key]
+                    
+            # Zabezpieczenie przed uruchomieniem okna poza widocznym ekranem 
+            # (np. po odłączeniu drugiego monitora)
+            config["x"] = max(0, config["x"])
+            config["y"] = max(0, config["y"])
             
             return config
     except Exception:
@@ -75,17 +74,10 @@ class MyCodeEditor(QsciScintilla):
         self.void_tags = {'br', 'hr', 'img', 'input', 'meta', 'link', 'base', 'area', 'col', 'embed', 'param', 'source', 'track', 'wbr'}
 
     def keyPressEvent(self, event):
-        # 0. ZAMIANA 2 SPACJI NA 4 SPACJE NA POCZĄTKU LINII
-        if event.key() == Qt.Key.Key_Space:
-            line, col = self.getCursorPosition()
-            line_text = self.text(line)[:col]
-            
-            if re.fullmatch(r' +', line_text) and len(line_text) % 4 == 1:
-                self.setSelection(line, col - 1, line, col)
-                self.removeSelectedText()
-                self.insert("    ")
-                self.setCursorPosition(line, col + 3)
-                return
+        # 0. ZABEZPIECZENIE PRZED USUNIĘCIEM ZAZNACZONEGO TEKSTU
+        if self.hasSelectedText():
+            super().keyPressEvent(event)
+            return
 
         # 1. INTELIGENTNY ENTER MIĘDZY TAGAMI
         if event.key() in [Qt.Key.Key_Return, Qt.Key.Key_Enter]:
@@ -197,14 +189,27 @@ class MyCodeEditor(QsciScintilla):
 
 
 class MkHTMLEditor(QMainWindow):
-    """Główne okno aplikacji mkHTML v0.0.2.1 z obsługą zakładek i zapamiętywaniem stanu okna."""
+    """Główne okno aplikacji mkHTML v1.0.0.1 z obsługą zakładek, ikony i zapamiętywaniem stanu okna."""
     def __init__(self):
         super().__init__()
         self.config = load_config()
         self.working_dir = self.config.get("working_dir", get_desktop_path())
         self.font = QFont("Consolas", 12)
         
-        self.setWindowTitle("mkHTML v0.0.2.1")
+        self.setWindowTitle("mkHTML v1.0.0.1")
+        
+        # Ustawianie ikony programu - obsługa ścieżki bezwzględnej (źródła + PyInstaller)
+        if getattr(sys, 'frozen', False):
+            if hasattr(sys, '_MEIPASS'):
+                base_dir = sys._MEIPASS
+            else:
+                base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            
+        icon_path = os.path.join(base_dir, "ikona.ico")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
         
         # Przywracanie ostatniego rozmiaru i położenia okna
         x = self.config.get("x", 100)
@@ -283,37 +288,18 @@ class MkHTMLEditor(QMainWindow):
         if editor:
             file_str = editor.current_file if editor.current_file else "Nowy plik"
             mod_str = " *" if editor.isModified() else ""
-            self.setWindowTitle(f"mkHTML v0.0.2.1 - {file_str}{mod_str}")
+            self.setWindowTitle(f"mkHTML v1.0.0.1 - {file_str}{mod_str}")
         else:
-            self.setWindowTitle("mkHTML v0.0.2.1")
+            self.setWindowTitle("mkHTML v1.0.0.1")
 
     def update_lexer_for_editor(self, editor):
-        """Ustawia odpowiedni lexer (HTML/CSS) dla podanego edytora."""
+        """Ustawia odpowiedni lexer (HTML/CSS/Brak) dla podanego edytora."""
         def set_color(lex, hex_color, cls_ref, *attrs):
             for attr in attrs:
                 if hasattr(cls_ref, attr):
                     lex.setColor(QColor(hex_color), getattr(cls_ref, attr))
 
-        if editor.current_file and editor.current_file.lower().endswith('.css'):
-            lexer = QsciLexerCSS(editor)
-            lexer.setDefaultFont(self.font)
-            lexer.setDefaultColor(QColor("#24292e"))
-            
-            set_color(lexer, "#d73a49", QsciLexerCSS, 'Tag')
-            set_color(lexer, "#6f42c1", QsciLexerCSS, 'ClassSelector')
-            set_color(lexer, "#005cc5", QsciLexerCSS, 'IDSelector')
-            set_color(lexer, "#008080", QsciLexerCSS, 'CSS1Property', 'CSS2Property', 'CSS3Property', 'UnknownProperty')
-            set_color(lexer, "#e36209", QsciLexerCSS, 'Value')
-            set_color(lexer, "#22863a", QsciLexerCSS, 'DoubleQuotedString', 'SingleQuotedString', 'String')
-            set_color(lexer, "#9e1c23", QsciLexerCSS, 'PseudoClass')
-            
-            if hasattr(QsciLexerCSS, 'Comment'):
-                comment_font = QFont(self.font)
-                comment_font.setItalic(True)
-                lexer.setColor(QColor("#6a737d"), QsciLexerCSS.Comment)
-                lexer.setFont(comment_font, QsciLexerCSS.Comment)
-
-        else:
+        def apply_html_lexer():
             lexer = QsciLexerHTML(editor)
             lexer.setDefaultFont(self.font)
             lexer.setDefaultColor(QColor("#24292e"))
@@ -328,8 +314,38 @@ class MkHTMLEditor(QMainWindow):
                 comment_font.setItalic(True)
                 lexer.setColor(QColor("#6a737d"), QsciLexerHTML.HTMLComment)
                 lexer.setFont(comment_font, QsciLexerHTML.HTMLComment)
+            return lexer
 
-        editor.setLexer(lexer)
+        # Sprawdzanie formatu pliku by nie zepsuć kolorowania dla np. plików .txt
+        if editor.current_file:
+            lower_path = editor.current_file.lower()
+            if lower_path.endswith('.css'):
+                lexer = QsciLexerCSS(editor)
+                lexer.setDefaultFont(self.font)
+                lexer.setDefaultColor(QColor("#24292e"))
+                
+                set_color(lexer, "#d73a49", QsciLexerCSS, 'Tag')
+                set_color(lexer, "#6f42c1", QsciLexerCSS, 'ClassSelector')
+                set_color(lexer, "#005cc5", QsciLexerCSS, 'IDSelector')
+                set_color(lexer, "#008080", QsciLexerCSS, 'CSS1Property', 'CSS2Property', 'CSS3Property', 'UnknownProperty')
+                set_color(lexer, "#e36209", QsciLexerCSS, 'Value')
+                set_color(lexer, "#22863a", QsciLexerCSS, 'DoubleQuotedString', 'SingleQuotedString', 'String')
+                set_color(lexer, "#9e1c23", QsciLexerCSS, 'PseudoClass')
+                
+                if hasattr(QsciLexerCSS, 'Comment'):
+                    comment_font = QFont(self.font)
+                    comment_font.setItalic(True)
+                    lexer.setColor(QColor("#6a737d"), QsciLexerCSS.Comment)
+                    lexer.setFont(comment_font, QsciLexerCSS.Comment)
+                editor.setLexer(lexer)
+            elif lower_path.endswith(('.html', '.htm')):
+                editor.setLexer(apply_html_lexer())
+            else:
+                editor.setLexer(None) # Wyłącza kolorowanie HTML dla innych formatów
+        else:
+            # Domyślnie użyj kolorowania HTML dla nowej (niezapisanej) zakładki
+            editor.setLexer(apply_html_lexer())
+
         editor.setIndentationsUseTabs(False)
         editor.setTabWidth(4)
         editor.setIndentationWidth(4)
@@ -397,11 +413,26 @@ class MkHTMLEditor(QMainWindow):
         paste_action.triggered.connect(lambda: self.current_editor() and self.current_editor().paste())
         edit_menu.addAction(paste_action)
 
-        run_menu = menu_bar.addMenu("Uruchom")
-        run_browser_action = QAction("Uruchom w przeglądarce", self)
-        run_browser_action.setShortcut(QKeySequence("F5"))
-        run_browser_action.triggered.connect(self.run_in_browser)
-        run_menu.addAction(run_browser_action)
+        # Pojedynczy przycisk "Podgląd" bezpośrednio na pasku menu
+        preview_action = QAction("Podgląd", self)
+        preview_action.setShortcut(QKeySequence("F5"))
+        preview_action.triggered.connect(self.run_in_browser)
+        menu_bar.addAction(preview_action)
+
+        # Menu "Odwiedź..." przesunięte na sam koniec
+        visit_menu = menu_bar.addMenu("Odwiedź...")
+        
+        update_action = QAction("Pobierz najnowszą wersję", self)
+        update_action.triggered.connect(lambda: webbrowser.open("https://github.com/StaryDooh/mkHTML/releases"))
+        visit_menu.addAction(update_action)
+        
+        bug_action = QAction("Zgłoś błąd", self)
+        bug_action.triggered.connect(lambda: webbrowser.open("https://github.com/StaryDooh/mkHTML/issues"))
+        visit_menu.addAction(bug_action)
+        
+        relax_action = QAction("Zrelaksuj się", self)
+        relax_action.triggered.connect(lambda: webbrowser.open("https://www.youtube.com/@StaryDooh"))
+        visit_menu.addAction(relax_action)
 
     def maybe_save_tab(self, index):
         """Weryfikuje niezapisane zmiany w konkretnej zakładce."""
@@ -461,7 +492,9 @@ class MkHTMLEditor(QMainWindow):
             if editor.current_file.lower().endswith(('.html', '.htm')):
                 if editor.isModified():
                     self.save_file()
-                webbrowser.open(f"file:///{os.path.abspath(editor.current_file)}")
+                # ZABEZPIECZENIE: Poprawny standard URI (QUrl)
+                url = QUrl.fromLocalFile(os.path.abspath(editor.current_file)).toString()
+                webbrowser.open(url)
             else:
                 QMessageBox.warning(self, "Uwaga", "Możesz uruchomić w przeglądarce tylko pliki HTML.")
 
@@ -476,8 +509,13 @@ class MkHTMLEditor(QMainWindow):
         )
         if file_path:
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
+                # ZABEZPIECZENIE: System awaryjny dla kodowania 1250 (polski Windows)
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                except UnicodeDecodeError:
+                    with open(file_path, 'r', encoding='cp1250') as f:
+                        content = f.read()
 
                 editor = self.current_editor()
                 if editor and editor.current_file is None and not editor.isModified() and editor.text() == "":

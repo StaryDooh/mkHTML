@@ -2,7 +2,35 @@
 
 Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pliku.
 
-Format opiera się na zasadach [Keep a Changelog](https://keepachangelog.com/pl/1.0.0/).
+## [1.0.0.1] - 2026-09-16
+
+### Added
+- Menu `Odwiedź...` na pasku menu zawierające odnośniki:
+  - `Pobierz najnowszą wersję` -> `https://github.com/StaryDooh/mkHTML/releases`
+  - `Zgłoś błąd` -> `https://github.com/StaryDooh/mkHTML/issues`
+  - `Zrelaksuj się` -> `https://www.youtube.com/@StaryDooh`
+
+### Changed
+- Pozycja menu `Odwiedź...` została dodana na końcu paska nawigacji.
+
+## [1.0.0.0] - 2026-09-15
+
+### Added
+- Pierwsza oficjalna wersja edytora **mkHTML**.
+- System zakładek (tabów) umożliwiający pracę na wielu plikach jednocześnie.
+- Kolorowanie składni dla plików HTML oraz CSS z wykorzystaniem biblioteki `QScintilla`.
+- Automatyczne zamykanie tagów HTML, klamer CSS oraz cudzysłowów.
+- Inteligentne auto-wcięcia oraz rozwijanie podstawowych szablonów kodu klawiszem `Tab`.
+- Funkcja podglądu pliku w domyślnej przeglądarce internetowej pod klawiszem `F5`.
+- Zapisywanie konfiguracji aplikacji (geometria okna, ostatnia ścieżka robocza) w pliku JSON profilu użytkownika.
+
+## [0.0.2.2] - 2026-09-15
+
+### Zmieniono
+- Zastąpiono rozwijane menu `Uruchom -> Uruchom w przeglądarce` pojedynczym, wygodniejszym przyciskiem **Podgląd** umieszczonym bezpośrednio na głównym pasku menu.
+
+### Naprawiono
+- Naprawiono błąd polegający na znikaniu ikony programu na pasku tytułowym okna (ikona ładuje się teraz poprawnie z bezwzględnej ścieżki, niezależnie od otwieranego pliku czy pracy z plikiem z użyciem PyInstallera).
 
 ## [0.0.2.1] - 2026-09-14
 
