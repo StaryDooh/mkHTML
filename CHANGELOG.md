@@ -2,6 +2,21 @@
 
 Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pliku.
 
+## [1.0.1.3] - 2026-09-17
+
+### Poprawki
+- **Edytor HTML:** Naprawiono problem polegający na ignorowaniu składni samozamykającej przez mechanizm automatycznego zamykania tagów[cite: 3]. Tagi kończące się jawnie znakiem `/>` (np. `<path d="M0 0" />` lub `<Component/>`) nie otrzymują już niepotrzebnego tagu zamykającego[cite: 3].
+
+## [1.0.1.2] - 2026-09-17
+
+### Poprawki
+- **Zapis plików:** Wyeliminowano błąd podwójnego zamknięcia deskryptora pliku w funkcji bezpiecznego zapisu `_atomic_save`[cite: 3]. Rozdzielono moment otwarcia deskryptora od zapisu, co zapobiega wywoływaniu błędu `OSError: Bad file descriptor` w bloku obsługi wyjątków i maskowaniu właściwej przyczyny problemu z zapisem[cite: 3].
+
+## [1.0.1.1] - 2026-09-17
+
+### Poprawki
+- **Skróty klawiszowe:** Rozwiązano krytyczny błąd rozwijania tagów za pomocą klawisza Tab, który wcześniej nie rozpoznawał kontekstu składniowego[cite: 3]. Dzięki sprawdzeniu stylu leksera w pozycji kursora wyeliminowano problem duplikowania zamykających tagów, zamieniania dowolnych tekstów/liczb na tagi wewnątrz atrybutów oraz niepoprawnego aktywowania mechanizmu w plikach niebędących kodem HTML[cite: 3].
+
 ## [1.0.1.0] - 2026-09-17
 
 ### 🐛 Naprawiono

@@ -15,7 +15,7 @@ from PyQt6.Qsci import QsciScintilla, QsciLexerHTML, QsciLexerCSS
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".mkhtml_config.json")
 
 def get_desktop_path():
-    """Pobiera ścieżkę do Pulpitu za pomocą wbudowanych i bezpiecznych mechanizmów Qt."""
+    """Pobiera ścieżkę do Pulpitu za pomocą wbudowanych mechanizmów Qt."""
     return QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DesktopLocation)
 
 def load_config():
@@ -71,10 +71,10 @@ class MyCodeEditor(QsciScintilla):
         self.file_encoding = 'utf-8'
         self.void_tags = {'br', 'hr', 'img', 'input', 'meta', 'link', 'base', 'area', 'col', 'embed', 'param', 'source', 'track', 'wbr'}
         
-        # Prekompilacja wyrażeń regularnych dla maksymalnej wydajności
+        # Prekompilacja wyrażeń regularnych
         self.rx_indent = re.compile(r'^([ \t]*)')
         self.rx_tag_trigger = re.compile(r'<?([a-zA-Z0-9-]+)>?\s*$')
-        self.rx_valid_tag = re.compile(r'^[a-zA-Z0-9-]+$')
+        self.rx_valid_tag = re.compile(r'^[a-zA-Z][a-zA-Z0-9-]*$')  # Tag musi zaczynać się od litery
         self.rx_close_tag = re.compile(r'<([a-zA-Z0-9-]+)[^>]*>$')
 
         # Automatyczne zawijanie wierszy na słowach
@@ -90,7 +90,7 @@ class MyCodeEditor(QsciScintilla):
 
         line, col = self.getCursorPosition()
 
-        # Pobieranie tekstu linii tylko gdy zdarzenie wymaga analizy skrótów/składni
+        # Pobieranie tekstu linii tylko gdy zdarzenie wymaga analizy
         needs_line_parse = key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Tab) or text in ('{', '"', "'", '>')
         full_line_text = self.text(line) if needs_line_parse else ""
 
@@ -107,69 +107,76 @@ class MyCodeEditor(QsciScintilla):
             super().keyPressEvent(event)
             return
 
-        # 1. OBSŁUGA SKRÓTÓW (TAB) I DYNAMICZNEGO ROZWIJANIA TAGÓW ORAZ LOREM IPSUM
+        # 1. OBSŁUGA SKRÓTÓW (TAB) I DYNAMICZNEGO ROZWIJANIA TAGÓW
         if key == Qt.Key.Key_Tab and not self.hasSelectedText():
             search_start = max(0, col - 200)
             chunk_before_cursor = full_line_text[search_start:col]
-            match = self.rx_tag_trigger.search(chunk_before_cursor)
             
-            if match:
-                word = match.group(1).lower()
-                matched_full_text = match.group(0)
-                replace_len = len(matched_full_text)
-                start_col = max(0, col - replace_len)
+            if not chunk_before_cursor.endswith('>'):
+                match = self.rx_tag_trigger.search(chunk_before_cursor)
                 
-                is_html_mode = isinstance(self.lexer(), QsciLexerHTML) or self.lexer() is None
-                is_valid_tag = bool(self.rx_valid_tag.match(word))
-                
-                if word == "lorem" or is_html_mode:
-                    lorem_text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+                if match:
+                    word = match.group(1).lower()
+                    matched_full_text = match.group(0)
+                    replace_len = len(matched_full_text)
+                    start_col = max(0, col - replace_len)
                     
-                    snippets = {
-                        "html": (
-                            "<!DOCTYPE html>\n<html lang=\"pl\">\n<head>\n"
-                            "    <meta charset=\"UTF-8\">\n"
-                            "    <title>Tytuł strony</title>\n"
-                            "    <link rel=\"stylesheet\" href=\"style.css\">\n"
-                            "</head>\n<body>\n    \n</body>\n</html>", 8, 4
-                        ),
-                        "a": ('<a href=""></a>', 0, 9),
-                        "img": ('<img src="" alt="">', 0, 10),
-                        "lorem": (lorem_text, 0, len(lorem_text))
-                    }
+                    is_html_mode = isinstance(self.lexer(), QsciLexerHTML)
+                    is_valid_tag = bool(self.rx_valid_tag.match(word))
                     
-                    if word in snippets or word in self.void_tags or (is_html_mode and is_valid_tag):
-                        indent_match = self.rx_indent.match(full_line_text)
-                        current_indent = indent_match.group(1) if indent_match else ""
+                    # Weryfikacja kontekstu składniowego
+                    pos = self.SendScintilla(QsciScintilla.SCI_GETCURRENTPOS)
+                    style = self.SendScintilla(QsciScintilla.SCI_GETSTYLEAT, max(0, pos - 1))
+                    is_valid_context = not is_html_mode or style in (0, 1, 2)
+                    
+                    if is_valid_context and (word == "lorem" or (is_html_mode and is_valid_tag)):
+                        lorem_text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
                         
-                        self.setSelection(line, start_col, line, col)
-                        self.removeSelectedText()
+                        snippets = {
+                            "html": (
+                                "<!DOCTYPE html>\n<html lang=\"pl\">\n<head>\n"
+                                "    <meta charset=\"UTF-8\">\n"
+                                "    <title>Tytuł strony</title>\n"
+                                "    <link rel=\"stylesheet\" href=\"style.css\">\n"
+                                "</head>\n<body>\n    \n</body>\n</html>", 8, 4
+                            ),
+                            "a": ('<a href=""></a>', 0, 9),
+                            "img": ('<img src="" alt="">', 0, 10),
+                            "lorem": (lorem_text, 0, len(lorem_text))
+                        }
                         
-                        if word in snippets:
-                            snippet_text, line_offset, col_offset = snippets[word]
+                        if word in snippets or word in self.void_tags or (is_html_mode and is_valid_tag):
+                            indent_match = self.rx_indent.match(full_line_text)
+                            current_indent = indent_match.group(1) if indent_match else ""
                             
-                            if current_indent and '\n' in snippet_text:
-                                lines = snippet_text.split('\n')
-                                snippet_text = lines[0] + '\n' + '\n'.join(current_indent + l for l in lines[1:])
+                            self.setSelection(line, start_col, line, col)
+                            self.removeSelectedText()
+                            
+                            if word in snippets:
+                                snippet_text, line_offset, col_offset = snippets[word]
                                 
-                            self.insert(snippet_text)
-                            
-                            if line_offset == 0:
-                                self.setCursorPosition(line, start_col + col_offset)
+                                if current_indent and '\n' in snippet_text:
+                                    lines = snippet_text.split('\n')
+                                    snippet_text = lines[0] + '\n' + '\n'.join(current_indent + l for l in lines[1:])
+                                    
+                                self.insert(snippet_text)
+                                
+                                if line_offset == 0:
+                                    self.setCursorPosition(line, start_col + col_offset)
+                                else:
+                                    self.setCursorPosition(line + line_offset, len(current_indent) + col_offset)
+                                return
+                                
+                            elif word in self.void_tags:
+                                tag_text = f"<{word}>"
+                                self.insert(tag_text)
+                                self.setCursorPosition(line, start_col + len(tag_text))
+                                return
                             else:
-                                self.setCursorPosition(line + line_offset, len(current_indent) + col_offset)
-                            return
-                            
-                        elif word in self.void_tags:
-                            tag_text = f"<{word}>"
-                            self.insert(tag_text)
-                            self.setCursorPosition(line, start_col + len(tag_text))
-                            return
-                        else:
-                            tag_text = f"<{word}></{word}>"
-                            self.insert(tag_text)
-                            self.setCursorPosition(line, start_col + len(word) + 2)
-                            return
+                                tag_text = f"<{word}></{word}>"
+                                self.insert(tag_text)
+                                self.setCursorPosition(line, start_col + len(word) + 2)
+                                return
 
             super().keyPressEvent(event)
             return
@@ -204,25 +211,27 @@ class MyCodeEditor(QsciScintilla):
             
             match = self.rx_close_tag.search(chunk_before_cursor)
             if match:
-                tag_name = match.group(1).lower()
-                if tag_name not in self.void_tags:
-                    closing_tag = f"</{tag_name}>"
-                    self.insert(closing_tag)
-                    self.setCursorPosition(line, col + 1)
+                inner_content = match.group(0)[:-1].rstrip()
+                if not inner_content.endswith('/'):
+                    tag_name = match.group(1).lower()
+                    if tag_name not in self.void_tags:
+                        closing_tag = f"</{tag_name}>"
+                        self.insert(closing_tag)
+                        self.setCursorPosition(line, col + 1)
             return
 
         super().keyPressEvent(event)
 
 
 class MkHTMLEditor(QMainWindow):
-    """Główne okno aplikacji mkHTML z obsługą zakładek, ikony i zapamiętywaniem stanu okna."""
+    """Główne okno aplikacji mkHTML z obsługą zakładek i zapamiętywaniem stanu okna."""
     def __init__(self):
         super().__init__()
         self.config = load_config()
         self.working_dir = self.config.get("working_dir", get_desktop_path())
         self.font = QFont("Consolas", 12)
         
-        self.setWindowTitle("mkHTML v1.0.1.0")
+        self.setWindowTitle("mkHTML v1.0.1.3")
         
         if getattr(sys, 'frozen', False):
             if hasattr(sys, '_MEIPASS'):
@@ -241,7 +250,6 @@ class MkHTMLEditor(QMainWindow):
         w = self.config.get("width", 950)
         h = self.config.get("height", 680)
         
-        # Precyzyjna weryfikacja widoczności okna na dostępnych monitorach (odporność na odpięty monitor)
         window_rect = QRect(x, y, w, h)
         is_visible = False
         for screen in QApplication.screens():
@@ -275,12 +283,15 @@ class MkHTMLEditor(QMainWindow):
         fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".mkhtml_save_", suffix=".tmp")
         
         try:
+            # Rozdzielenie otwarcia fd od kontekstu 'with', aby zapobiec podwójnemu zamykaniu deskryptora
             try:
-                with os.fdopen(fd, 'w', encoding=encoding) as f:
-                    f.write(content)
+                f = os.fdopen(fd, 'w', encoding=encoding)
             except Exception:
                 os.close(fd)
                 raise
+            
+            with f:
+                f.write(content)
 
             try:
                 os.replace(tmp_path, abs_file_path)
@@ -354,9 +365,9 @@ class MkHTMLEditor(QMainWindow):
         if editor:
             file_str = editor.current_file if editor.current_file else "Nowy plik"
             mod_str = " *" if editor.isModified() else ""
-            self.setWindowTitle(f"mkHTML v1.0.1.0 - {file_str}{mod_str}")
+            self.setWindowTitle(f"mkHTML v1.0.1.3 - {file_str}{mod_str}")
         else:
-            self.setWindowTitle("mkHTML v1.0.1.0")
+            self.setWindowTitle("mkHTML v1.0.1.3")
 
     def update_lexer_for_editor(self, editor):
         """Ustawia odpowiedni lexer (HTML/CSS/Brak) oraz czyści stary z pamięci."""
