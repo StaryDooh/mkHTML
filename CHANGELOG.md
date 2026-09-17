@@ -2,6 +2,24 @@
 
 Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pliku.
 
+## [1.0.1.0] - 2026-09-17
+
+### 🐛 Naprawiono
+- **Błąd zapisu atomowego przy ścieżkach względnych (`EXDEV`):** Wymuszono konwersję ścieżki pliku na ścieżkę bezwzględną (`os.path.abspath`), co zapobiega błędom operacji `os.replace` przy zapisie plików otwartych z poziomu konsoli lub ścieżek względnych.
+- **Wycieki pamięci obiektów Lexera:** Dodano jawne zwalnianie pamięci poprawnie odłączanych lexerów (`deleteLater()`) przy zmianie rozszerzenia pliku lub operacji *Zapisz jako*.
+- **Cichą zmianę kodowania plików:** Wdrożono zapamiętywanie kodowania źródłowego (np. `cp1250`) podczas otwierania pliku i ponowne jego wykorzystanie przy zapisie na dysk.
+- **Wycieki deskryptorów plików (File Descriptors):** Zabezpieczono tworzenie plików tymczasowych w `_atomic_save` blokiem `try...finally`, co gwarantuje zamknięcie i usunięcie deskryptora w przypadku awarii I/O.
+
+### ⚡ Zoptymalizowano
+- **Płynność pisania w dużych plikach (UI Latency):** Zoptymalizowano metodę `keyPressEvent` — pełny tekst wiersza jest pobierany i analizowany tylko wtedy, gdy wciśnięty klawisz wyzwala regułę skrótu lub autouzupełniania.
+- **Skanowanie tekstu kursorem:** Wyszukiwanie domknięć tagów HTML i reguł snippetów oparto na wąskim buforze tekstu (do 200 znaków wstecz od kursora) zamiast pełnej linii tekstu.
+- **Redukcję operacji I/O:** Usunięto synchroniczny zapis pliku konfiguracyjnego `save_app_config()` przy otwieraniu i zapisywaniu plików. Konfiguracja jest teraz zapisywana wyłącznie raz, podczas zamykania aplikacji.
+- **Kompilację Regex:** Przeniesiono kompilację wszystkich wyrażeń regularnych (`re.compile`) do konstruktora klasy `MyCodeEditor`.
+
+### 🚀 Udoskonalenia
+- **Bezpieczeństwo pozycji okna:** Dodano mechanizm sprawdzania części wspólnej geometrii okna z dostępnymi ekranami (`intersected`). Okno automatycznie wyśrodkowuje się na głównym ekranie, jeśli poprzednie współrzędne znajdowały się na odłączonym monitorze.
+- **Zarządzanie pamięcią RAM zakładek:** Wywołanie `deleteLater()` na zamkniętych zakładkach usuwa nieużywane instancje `QsciScintilla`.
+
 ## [1.0.0.1] - 2026-09-16
 
 ### Added
