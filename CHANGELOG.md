@@ -2,6 +2,18 @@
 
 Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pliku.
 
+## [1.0.1.5] - 2026-09-18
+
+### Refaktoryzacja i czyszczenie kodu
+- **Skróty klawiszowe (Tab):** Usunięto martwy, redundantny warunek filtrujący w logice rozwijania tagów.
+- **Interfejs użytkownika:** Usunięto nieużywaną referencję do zmiennej `btn_discard` w oknie dialogowym pytającym o zapis zmian.
+- **Menu główne:** Wprowadzono metodę pomocniczą `_add_action` do budowania menu w `create_menu()`, co zredukowało powtarzalny kod.
+
+## [1.0.1.4] - 2026-09-18
+
+### Poprawki
+- **Zapis plików (`_atomic_save`):** Usunięto ryzykowny fallback otwierający plik docelowy bezpośrednio w trybie `'w'`. W przypadku błędu `OSError` aplikacja wykonuje ponowną próbę podmiany pliku `os.replace` po krótkim opóźnieniu (`time.sleep(0.1)`), eliminując ryzyko utraty danych przy chwilowej blokadzie przez program antywirusowy.
+
 ## [1.0.1.3] - 2026-09-17
 
 ### Poprawki

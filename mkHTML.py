@@ -2,6 +2,7 @@ import sys
 import re
 import os
 import json
+import time
 import webbrowser
 import tempfile
 from PyQt6.QtWidgets import (
@@ -145,38 +146,37 @@ class MyCodeEditor(QsciScintilla):
                             "lorem": (lorem_text, 0, len(lorem_text))
                         }
                         
-                        if word in snippets or word in self.void_tags or (is_html_mode and is_valid_tag):
-                            indent_match = self.rx_indent.match(full_line_text)
-                            current_indent = indent_match.group(1) if indent_match else ""
+                        indent_match = self.rx_indent.match(full_line_text)
+                        current_indent = indent_match.group(1) if indent_match else ""
+                        
+                        self.setSelection(line, start_col, line, col)
+                        self.removeSelectedText()
+                        
+                        if word in snippets:
+                            snippet_text, line_offset, col_offset = snippets[word]
                             
-                            self.setSelection(line, start_col, line, col)
-                            self.removeSelectedText()
+                            if current_indent and '\n' in snippet_text:
+                                lines = snippet_text.split('\n')
+                                snippet_text = lines[0] + '\n' + '\n'.join(current_indent + l for l in lines[1:])
+                                
+                            self.insert(snippet_text)
                             
-                            if word in snippets:
-                                snippet_text, line_offset, col_offset = snippets[word]
-                                
-                                if current_indent and '\n' in snippet_text:
-                                    lines = snippet_text.split('\n')
-                                    snippet_text = lines[0] + '\n' + '\n'.join(current_indent + l for l in lines[1:])
-                                    
-                                self.insert(snippet_text)
-                                
-                                if line_offset == 0:
-                                    self.setCursorPosition(line, start_col + col_offset)
-                                else:
-                                    self.setCursorPosition(line + line_offset, len(current_indent) + col_offset)
-                                return
-                                
-                            elif word in self.void_tags:
-                                tag_text = f"<{word}>"
-                                self.insert(tag_text)
-                                self.setCursorPosition(line, start_col + len(tag_text))
-                                return
+                            if line_offset == 0:
+                                self.setCursorPosition(line, start_col + col_offset)
                             else:
-                                tag_text = f"<{word}></{word}>"
-                                self.insert(tag_text)
-                                self.setCursorPosition(line, start_col + len(word) + 2)
-                                return
+                                self.setCursorPosition(line + line_offset, len(current_indent) + col_offset)
+                            return
+                            
+                        elif word in self.void_tags:
+                            tag_text = f"<{word}>"
+                            self.insert(tag_text)
+                            self.setCursorPosition(line, start_col + len(tag_text))
+                            return
+                        else:
+                            tag_text = f"<{word}></{word}>"
+                            self.insert(tag_text)
+                            self.setCursorPosition(line, start_col + len(word) + 2)
+                            return
 
             super().keyPressEvent(event)
             return
@@ -231,7 +231,7 @@ class MkHTMLEditor(QMainWindow):
         self.working_dir = self.config.get("working_dir", get_desktop_path())
         self.font = QFont("Consolas", 12)
         
-        self.setWindowTitle("mkHTML v1.0.1.3")
+        self.setWindowTitle("mkHTML v1.0.1.5")
         
         if getattr(sys, 'frozen', False):
             if hasattr(sys, '_MEIPASS'):
@@ -283,7 +283,6 @@ class MkHTMLEditor(QMainWindow):
         fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".mkhtml_save_", suffix=".tmp")
         
         try:
-            # Rozdzielenie otwarcia fd od kontekstu 'with', aby zapobiec podwójnemu zamykaniu deskryptora
             try:
                 f = os.fdopen(fd, 'w', encoding=encoding)
             except Exception:
@@ -296,10 +295,9 @@ class MkHTMLEditor(QMainWindow):
             try:
                 os.replace(tmp_path, abs_file_path)
             except OSError:
-                with open(abs_file_path, 'w', encoding=encoding) as f_dest:
-                    f_dest.write(content)
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
+                time.sleep(0.1)
+                os.replace(tmp_path, abs_file_path)
+
         except Exception as e:
             if os.path.exists(tmp_path):
                 try:
@@ -365,9 +363,9 @@ class MkHTMLEditor(QMainWindow):
         if editor:
             file_str = editor.current_file if editor.current_file else "Nowy plik"
             mod_str = " *" if editor.isModified() else ""
-            self.setWindowTitle(f"mkHTML v1.0.1.3 - {file_str}{mod_str}")
+            self.setWindowTitle(f"mkHTML v1.0.1.5 - {file_str}{mod_str}")
         else:
-            self.setWindowTitle("mkHTML v1.0.1.3")
+            self.setWindowTitle("mkHTML v1.0.1.5")
 
     def update_lexer_for_editor(self, editor):
         """Ustawia odpowiedni lexer (HTML/CSS/Brak) oraz czyści stary z pamięci."""
@@ -433,84 +431,40 @@ class MkHTMLEditor(QMainWindow):
         editor.setAutoIndent(True)
         editor.setBackspaceUnindents(True)
 
+    def _add_action(self, parent_menu, text, slot, shortcut=None):
+        """Metoda pomocnicza do tworzenia i dodawania akcji do menu."""
+        action = QAction(text, self)
+        if shortcut:
+            action.setShortcut(shortcut)
+        action.triggered.connect(slot)
+        parent_menu.addAction(action)
+        return action
+
     def create_menu(self):
         menu_bar = self.menuBar()
         
         file_menu = menu_bar.addMenu("Plik")
-        
-        new_action = QAction("Nowy", self)
-        new_action.setShortcut(QKeySequence.StandardKey.New)
-        new_action.triggered.connect(self.new_file)
-        file_menu.addAction(new_action)
-        
-        open_action = QAction("Otwórz...", self)
-        open_action.setShortcut(QKeySequence.StandardKey.Open)
-        open_action.triggered.connect(self.open_file)
-        file_menu.addAction(open_action)
-        
-        save_action = QAction("Zapisz", self)
-        save_action.setShortcut(QKeySequence.StandardKey.Save)
-        save_action.triggered.connect(self.save_file)
-        file_menu.addAction(save_action)
-        
-        save_as_action = QAction("Zapisz jako...", self)
-        save_as_action.triggered.connect(self.save_file_as)
-        file_menu.addAction(save_as_action)
-        
+        self._add_action(file_menu, "Nowy", self.new_file, QKeySequence.StandardKey.New)
+        self._add_action(file_menu, "Otwórz...", self.open_file, QKeySequence.StandardKey.Open)
+        self._add_action(file_menu, "Zapisz", self.save_file, QKeySequence.StandardKey.Save)
+        self._add_action(file_menu, "Zapisz jako...", self.save_file_as)
         file_menu.addSeparator()
-        
-        exit_action = QAction("Zakończ", self)
-        exit_action.setShortcut(QKeySequence.StandardKey.Quit)
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
+        self._add_action(file_menu, "Zakończ", self.close, QKeySequence.StandardKey.Quit)
         
         edit_menu = menu_bar.addMenu("Edycja")
-        
-        undo_action = QAction("Cofnij", self)
-        undo_action.setShortcut(QKeySequence.StandardKey.Undo)
-        undo_action.triggered.connect(lambda: self.current_editor() and self.current_editor().undo())
-        edit_menu.addAction(undo_action)
-        
-        redo_action = QAction("Ponów", self)
-        redo_action.setShortcut(QKeySequence.StandardKey.Redo)
-        redo_action.triggered.connect(lambda: self.current_editor() and self.current_editor().redo())
-        edit_menu.addAction(redo_action)
-        
+        self._add_action(edit_menu, "Cofnij", lambda: self.current_editor() and self.current_editor().undo(), QKeySequence.StandardKey.Undo)
+        self._add_action(edit_menu, "Ponów", lambda: self.current_editor() and self.current_editor().redo(), QKeySequence.StandardKey.Redo)
         edit_menu.addSeparator()
-        
-        cut_action = QAction("Wytnij", self)
-        cut_action.setShortcut(QKeySequence.StandardKey.Cut)
-        cut_action.triggered.connect(lambda: self.current_editor() and self.current_editor().cut())
-        edit_menu.addAction(cut_action)
-        
-        copy_action = QAction("Kopiuj", self)
-        copy_action.setShortcut(QKeySequence.StandardKey.Copy)
-        copy_action.triggered.connect(lambda: self.current_editor() and self.current_editor().copy())
-        edit_menu.addAction(copy_action)
-        
-        paste_action = QAction("Wklej", self)
-        paste_action.setShortcut(QKeySequence.StandardKey.Paste)
-        paste_action.triggered.connect(lambda: self.current_editor() and self.current_editor().paste())
-        edit_menu.addAction(paste_action)
+        self._add_action(edit_menu, "Wytnij", lambda: self.current_editor() and self.current_editor().cut(), QKeySequence.StandardKey.Cut)
+        self._add_action(edit_menu, "Kopiuj", lambda: self.current_editor() and self.current_editor().copy(), QKeySequence.StandardKey.Copy)
+        self._add_action(edit_menu, "Wklej", lambda: self.current_editor() and self.current_editor().paste(), QKeySequence.StandardKey.Paste)
 
-        preview_action = QAction("Podgląd", self)
-        preview_action.setShortcut(QKeySequence("F5"))
-        preview_action.triggered.connect(self.run_in_browser)
-        menu_bar.addAction(preview_action)
+        self._add_action(menu_bar, "Podgląd", self.run_in_browser, QKeySequence("F5"))
 
         visit_menu = menu_bar.addMenu("Odwiedź...")
-        
-        update_action = QAction("Pobierz najnowszą wersję", self)
-        update_action.triggered.connect(lambda: webbrowser.open("https://github.com/StaryDooh/mkHTML/releases"))
-        visit_menu.addAction(update_action)
-        
-        bug_action = QAction("Zgłoś błąd", self)
-        bug_action.triggered.connect(lambda: webbrowser.open("https://github.com/StaryDooh/mkHTML/issues"))
-        visit_menu.addAction(bug_action)
-        
-        relax_action = QAction("Zrelaksuj się", self)
-        relax_action.triggered.connect(lambda: webbrowser.open("https://www.youtube.com/@StaryDooh"))
-        visit_menu.addAction(relax_action)
+        self._add_action(visit_menu, "Pobierz najnowszą wersję", lambda: webbrowser.open("https://github.com/StaryDooh/mkHTML/releases"))
+        self._add_action(visit_menu, "Zgłoś błąd", lambda: webbrowser.open("https://github.com/StaryDooh/mkHTML/issues"))
+        self._add_action(visit_menu, "Zrelaksuj się", lambda: webbrowser.open("https://www.youtube.com/@StaryDooh"))
 
     def maybe_save_tab(self, index):
         """Weryfikuje niezapisane zmiany w konkretnej zakładce."""
@@ -526,7 +480,7 @@ class MkHTMLEditor(QMainWindow):
         msg_box.setText(f"Plik '{file_name}' zawiera niezapisane zmiany.\nCzy chcesz je zapisać?")
         
         btn_save = msg_box.addButton("Zapisz", QMessageBox.ButtonRole.AcceptRole)
-        btn_discard = msg_box.addButton("Nie zapisuj", QMessageBox.ButtonRole.DestructiveRole)
+        msg_box.addButton("Nie zapisuj", QMessageBox.ButtonRole.DestructiveRole)
         btn_cancel = msg_box.addButton("Anuluj", QMessageBox.ButtonRole.RejectRole)
         
         msg_box.exec()
