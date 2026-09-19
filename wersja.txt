@@ -2,8 +2,8 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
     # Wersja pliku i produktu (musi składać się z 4 liczb oddzielonych przecinkami)
-    filevers=(1, 0, 1, 5),
-    prodvers=(1, 0, 1, 5),
+    filevers=(1, 0, 1, 7),
+    prodvers=(1, 0, 1, 7),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,

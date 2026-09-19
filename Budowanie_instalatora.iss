@@ -1,4 +1,4 @@
-﻿#define MyAppVersion "1.0.1.5"
+﻿#define MyAppVersion "1.0.1.7"
 
 
 [Setup]
@@ -35,7 +35,7 @@ SolidCompression=yes
 CloseApplications=yes
 
 ; Informuje system Windows, że instalator zmienia skojarzenia plików
-ChangesAssociations=yes
+;ChangesAssociations=yes
 
 [Languages]
 Name: "pl"; MessagesFile: "compiler:Languages\Polish.isl"
@@ -45,7 +45,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; Główny plik wykonywalny pobierany z podkatalogu dist/mkHTML
-Source: "dist\mkHTML\mkHTML.exe"; DestDir: "{app}"; Flags: ignoreversion
+;Source: "dist\mkHTML\mkHTML.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Kopiuje całą resztę z folderu dist/mkHTML (w tym folder _internal ze wszystkimi plikami)
 Source: "dist\mkHTML\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

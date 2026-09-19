@@ -231,7 +231,7 @@ class MkHTMLEditor(QMainWindow):
         self.working_dir = self.config.get("working_dir", get_desktop_path())
         self.font = QFont("Consolas", 12)
         
-        self.setWindowTitle("mkHTML v1.0.1.5")
+        self.setWindowTitle("mkHTML v1.0.1.7")
         
         if getattr(sys, 'frozen', False):
             if hasattr(sys, '_MEIPASS'):
@@ -363,9 +363,9 @@ class MkHTMLEditor(QMainWindow):
         if editor:
             file_str = editor.current_file if editor.current_file else "Nowy plik"
             mod_str = " *" if editor.isModified() else ""
-            self.setWindowTitle(f"mkHTML v1.0.1.5 - {file_str}{mod_str}")
+            self.setWindowTitle(f"mkHTML v1.0.1.7 - {file_str}{mod_str}")
         else:
-            self.setWindowTitle("mkHTML v1.0.1.5")
+            self.setWindowTitle("mkHTML v1.0.1.7")
 
     def update_lexer_for_editor(self, editor):
         """Ustawia odpowiedni lexer (HTML/CSS/Brak) oraz czyści stary z pamięci."""
@@ -537,11 +537,29 @@ class MkHTMLEditor(QMainWindow):
         self.add_new_tab()
 
     def open_file(self):
-        """Otwiera plik w nowej zakładce (lub zastępuje pustą niezmodyfikowaną)."""
+        """Otwiera plik w nowej zakładce (lub przełącza na istniejącą, jeśli plik jest już otwarty)."""
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Otwórz plik", self.working_dir, "Pliki Web (*.html *.htm *.css);;Wszystkie pliki (*)"
         )
         if file_path:
+            # Weryfikacja duplikatów z pełną szczelnością (case-insensitivity, symlinki)
+            for i in range(self.tabs.count()):
+                editor = self.tabs.widget(i)
+                if editor and editor.current_file:
+                    is_duplicate = False
+                    try:
+                        # os.path.samefile sprawdza fizyczny obiekt pliku z pominięciem różnic logicznych
+                        if os.path.samefile(file_path, editor.current_file):
+                            is_duplicate = True
+                    except FileNotFoundError:
+                        # Fallback dla plików usuniętych z dysku w trakcie ich otwarcia w edytorze
+                        if os.path.normcase(os.path.abspath(file_path)) == os.path.normcase(os.path.abspath(editor.current_file)):
+                            is_duplicate = True
+                            
+                    if is_duplicate:
+                        self.tabs.setCurrentIndex(i)
+                        return
+
             try:
                 encoding_used = 'utf-8'
                 try:

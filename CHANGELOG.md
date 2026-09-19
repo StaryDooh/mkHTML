@@ -2,6 +2,17 @@
 
 Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pliku.
 
+## [1.0.1.7] - 2026-09-19
+
+### Poprawki
+- **Uszczelnienie wykrywania duplikatów:** Zmodyfikowano mechanizm identyfikacji już otwartych plików, wprowadzając weryfikację opartą na `os.path.samefile()`. Gwarantuje to pełną odporność na różnice w wielkości liter w ścieżkach (istotne w systemie Windows) oraz poprawne rozwiązywanie dowiązań symbolicznych.
+- **Zabezpieczenie awaryjne (Fallback):** Dodano zapasową weryfikację przez `os.path.normcase(os.path.abspath())` na wypadek usunięcia otwartego pliku w tle.
+
+## [1.0.1.6] - 2026-09-19
+
+### Dodane
+- **Zarządzanie zakładkami (Ochrona przed utratą danych):** Dodano mechanizm wykrywania plików już otwartych w edytorze (wykonywany jeszcze przed odczytem pliku z dysku). Przy próbie ponownego otwarcia tego samego pliku, aplikacja automatycznie przełącza widok na istniejącą zakładkę, zapobiegając utworzeniu duplikatu i potencjalnemu nadpisaniu niezapisanej pracy użytkownika.
+
 ## [1.0.1.5] - 2026-09-18
 
 ### Refaktoryzacja i czyszczenie kodu
@@ -31,19 +42,19 @@ Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pli
 
 ## [1.0.1.0] - 2026-09-17
 
-### 🐛 Naprawiono
+### Naprawiono
 - **Błąd zapisu atomowego przy ścieżkach względnych (`EXDEV`):** Wymuszono konwersję ścieżki pliku na ścieżkę bezwzględną (`os.path.abspath`), co zapobiega błędom operacji `os.replace` przy zapisie plików otwartych z poziomu konsoli lub ścieżek względnych.
 - **Wycieki pamięci obiektów Lexera:** Dodano jawne zwalnianie pamięci poprawnie odłączanych lexerów (`deleteLater()`) przy zmianie rozszerzenia pliku lub operacji *Zapisz jako*.
 - **Cichą zmianę kodowania plików:** Wdrożono zapamiętywanie kodowania źródłowego (np. `cp1250`) podczas otwierania pliku i ponowne jego wykorzystanie przy zapisie na dysk.
 - **Wycieki deskryptorów plików (File Descriptors):** Zabezpieczono tworzenie plików tymczasowych w `_atomic_save` blokiem `try...finally`, co gwarantuje zamknięcie i usunięcie deskryptora w przypadku awarii I/O.
 
-### ⚡ Zoptymalizowano
+### Zoptymalizowano
 - **Płynność pisania w dużych plikach (UI Latency):** Zoptymalizowano metodę `keyPressEvent` — pełny tekst wiersza jest pobierany i analizowany tylko wtedy, gdy wciśnięty klawisz wyzwala regułę skrótu lub autouzupełniania.
 - **Skanowanie tekstu kursorem:** Wyszukiwanie domknięć tagów HTML i reguł snippetów oparto na wąskim buforze tekstu (do 200 znaków wstecz od kursora) zamiast pełnej linii tekstu.
 - **Redukcję operacji I/O:** Usunięto synchroniczny zapis pliku konfiguracyjnego `save_app_config()` przy otwieraniu i zapisywaniu plików. Konfiguracja jest teraz zapisywana wyłącznie raz, podczas zamykania aplikacji.
 - **Kompilację Regex:** Przeniesiono kompilację wszystkich wyrażeń regularnych (`re.compile`) do konstruktora klasy `MyCodeEditor`.
 
-### 🚀 Udoskonalenia
+### Udoskonalenia
 - **Bezpieczeństwo pozycji okna:** Dodano mechanizm sprawdzania części wspólnej geometrii okna z dostępnymi ekranami (`intersected`). Okno automatycznie wyśrodkowuje się na głównym ekranie, jeśli poprzednie współrzędne znajdowały się na odłączonym monitorze.
 - **Zarządzanie pamięcią RAM zakładek:** Wywołanie `deleteLater()` na zamkniętych zakładkach usuwa nieużywane instancje `QsciScintilla`.
 
@@ -86,8 +97,6 @@ Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pli
 ### Zmieniono
 - Rozbudowano strukturę pliku konfiguracyjnego `~/.mkhtml_config.json` o parametry pozycji i wymiarów okna.
 
----
-
 ## [0.0.2.0] - 2026-09-14
 
 ### Dodano
@@ -100,8 +109,6 @@ Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pli
 - Akcja menu **Plik -> Nowy** tworzy teraz nową zakładkę edytora.
 - Zamknięcie programu sprawdza status modyfikacji we wszystkich otwartych zakładkach i kolejno pyta o zapis niezapisanych plików.
 
----
-
 ## [0.0.1.2] - 2026-09-10
 
 ### Dodano
@@ -111,8 +118,6 @@ Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pli
 
 ### Zmieniono
 - Ujednolicono wcięcia kodu na 4 spacje (z automatyczną konwersją podwójnych spacji).
-
----
 
 ## [0.0.1.0] - 2026-09-01
 
