@@ -1,4 +1,4 @@
-﻿#define MyAppVersion "1.0.1.7"
+﻿#define MyAppVersion "1.0.1.15"
 
 
 [Setup]

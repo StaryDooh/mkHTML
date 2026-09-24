@@ -2,6 +2,80 @@
 
 Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pliku.
 
+## [1.0.1.15]
+
+### Zmieniono
+- Ustabilizowano działanie edytora po ostatnich zmianach w cyklu życia kart.
+- Wycofano eksperymentalne zmiany w układzie okien, przywracając sprawdzoną obsługę konfiguracji bazowej.
+
+---
+
+## [1.0.1.14]
+
+### Dodano
+- Funkcję automatycznego parowania nawiasów klamrowych `{}` przy pracy z plikami CSS.
+### Naprawiono
+- Błąd powodujący nieprawidłowe domykanie tagów typu "void" (np. `<img>`, `<br>`).
+
+---
+
+## [1.0.1.13]
+
+### Zmieniono
+- Zoptymalizowano system wcięć (indentacji) przenoszący odpowiedni poziom marginesu przy przejściu do nowej linii.
+### Naprawiono
+- Problem z obcinaniem numeracji linii dla plików powyżej 9999 wierszy poprzez zastosowanie dynamicznej szerokości marginesu.
+
+---
+
+## [1.0.1.12]
+
+### Dodano
+- Możliwość otwierania wielu plików jednocześnie w oknie dialogowym (wykorzystanie `getOpenFileNames`).
+- Standardowe skróty klawiszowe w menu głównym (m.in. `Ctrl+W`, `Ctrl+A`).
+### Zmieniono
+- Dodano mnemoniki (znaki `&`) w nazwach zakładek menu, poprawiając dostępność aplikacji z poziomu klawiatury.
+- Zgrupowano akcje zmiany motywów w wykluczającą się grupę `QActionGroup`.
+
+---
+
+## [1.0.1.11]
+
+### Dodano
+- Obejmowanie zaznaczonego tekstu cudzysłowami (po wciśnięciu `"` na zaznaczonym fragmencie).
+### Naprawiono
+- Konflikt nazw zmiennych, w którym `self.font` nadpisywało natywną metodę `QWidget.font()`.
+
+---
+
+## [1.0.1.10]
+
+### Dodano
+- Sprawdzanie duplikatów w akcji "Zapisz jako", chroniące przed otwarciem tego samego pliku w dwóch osobnych kartach.
+### Zmieniono
+- Uporządkowano zarządzanie wersją aplikacji, przenosząc ją do jednej globalnej stałej `APP_VERSION`.
+
+---
+
+## [1.0.1.9]
+
+### Dodano
+- Zabezpieczenie przed uszkodzonym plikiem konfiguracyjnym JSON poprzez wymuszenie minimalnych rozmiarów okna (400x300).
+- Rozszerzono automatyczne podpinanie leksera HTML dla dodatkowych formatów: `.svg`, `.xml` oraz `.php`.
+
+---
+
+## [1.0.1.8]
+
+### Zmieniono
+- Zachowanie klawiszy `Enter` i `Esc` w oknach dialogowych (przypisanie `setDefaultButton` oraz `setEscapeButton`), co czyni nawigację bardziej przewidywalną.
+### Naprawiono
+- Logikę wczytywania współrzędnych w układach wielomonitorowych, zapobiegając uciekaniu okna na ekran główny.
+- Atomowy zapis plików konfiguracyjnych, zapobiegający ich wyzerowaniu w przypadku nagłego zamknięcia programu lub błędu systemu.
+- Weryfikację typów w odczycie konfiguracji (zabezpieczenie przed rzutowaniem wartości `bool` na `int`).
+
+---
+
 ## [1.0.1.7] - 2026-09-19
 
 ### Poprawki

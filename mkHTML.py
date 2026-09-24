@@ -3,31 +3,318 @@ import re
 import os
 import json
 import time
+import codecs
+import shutil
 import webbrowser
 import tempfile
+import logging
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QFileDialog, QMessageBox, QTabWidget
 )
-from PyQt6.QtGui import QFont, QAction, QKeySequence, QColor, QIcon
+from PyQt6.QtGui import QFont, QFontDatabase, QAction, QKeySequence, QColor, QIcon
 from PyQt6.QtCore import Qt, QUrl, QStandardPaths, QRect
 from PyQt6.Qsci import QsciScintilla, QsciLexerHTML, QsciLexerCSS
 
-# --- KONFIGURACJA ŚCIEŻEK I USTAWIEŃ ---
+# --- MAPOWANIE EOL ---
+EOL = {
+    QsciScintilla.EolMode.EolWindows: '\r\n',
+    QsciScintilla.EolMode.EolUnix: '\n',
+    QsciScintilla.EolMode.EolMac: '\r'
+}
+
+def read_text_file(path):
+    """Odczytuje plik tekstowy, wykrywa pliki binarne, czyści BOM i ustala EOL."""
+    raw = Path(path).read_bytes()
+    if b'\x00' in raw[:8192]:
+        raise ValueError("Plik wygląda na plik binarny (wykryto bajty NUL).")
+        
+    order = ('utf-8-sig', 'cp1250') if raw.startswith(codecs.BOM_UTF8) else ('utf-8', 'cp1250')
+    for enc in order:
+        try:
+            text = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raise ValueError("Nie rozpoznano kodowania pliku (obsługiwane: UTF-8 / Windows-1250).")
+        
+    crlf = text.count('\r\n')
+    lf = text.count('\n') - crlf
+    
+    if crlf or lf:
+        mode = (QsciScintilla.EolMode.EolWindows if crlf >= lf
+                else QsciScintilla.EolMode.EolUnix)
+        text = re.sub(r'\r\n|\r|\n', EOL[mode], text)
+    else:
+        mode = QsciScintilla.EolMode.EolWindows if os.name == 'nt' else QsciScintilla.EolMode.EolUnix
+        
+    return text, enc, mode
+
+# --- DEFINICJE MOTYWÓW ---
+THEMES = {
+    "jasny": {
+        "name": "Jasny (GitHub Light)",
+        "app_qss": "",
+        "bg": "#ffffff",
+        "fg": "#24292e",
+        "margin_bg": "#f6f8fa",
+        "margin_fg": "#6a737d",
+        "caret_line": "#f6f8fa",
+        "caret": "#24292e",
+        "selection_bg": "#0366d6",
+        "selection_fg": "#ffffff",
+        "html": {
+            "tag": "#005cc5",
+            "attr": "#6f42c1",
+            "string": "#22863a",
+            "entity": "#e36209",
+            "comment": "#6a737d",
+        },
+        "css": {
+            "tag": "#d73a49",
+            "class": "#6f42c1",
+            "id": "#005cc5",
+            "prop": "#008080",
+            "val": "#e36209",
+            "string": "#22863a",
+            "pseudo": "#9e1c23",
+            "comment": "#6a737d",
+        }
+    },
+    "ciemny": {
+        "name": "Ciemny (VS Code Dark)",
+        "app_qss": """
+            QMainWindow { background-color: #1e1e1e; color: #d4d4d4; }
+            QMenuBar { background-color: #252526; color: #cccccc; border-bottom: 1px solid #3c3c3c; }
+            QMenuBar::item:selected { background-color: #3c3c3c; color: #ffffff; }
+            QMenu { background-color: #252526; color: #cccccc; border: 1px solid #3c3c3c; }
+            QMenu::item:selected { background-color: #04395e; color: #ffffff; }
+            QTabWidget::pane { border: 1px solid #2d2d2d; background-color: #1e1e1e; }
+            QTabBar::tab { background-color: #2d2d2d; color: #969696; padding: 6px 12px; border: 1px solid #252526; }
+            QTabBar::tab:selected { background-color: #1e1e1e; color: #ffffff; border-top: 2px solid #007acc; }
+            QTabBar::tab:hover { background-color: #3c3c3c; color: #ffffff; }
+            QMessageBox { background-color: #252526; color: #cccccc; }
+        """,
+        "bg": "#1e1e1e",
+        "fg": "#d4d4d4",
+        "margin_bg": "#252526",
+        "margin_fg": "#858585",
+        "caret_line": "#282828",
+        "caret": "#aeafad",
+        "selection_bg": "#264f78",
+        "selection_fg": "#ffffff",
+        "html": {
+            "tag": "#569cd6",
+            "attr": "#9cdcfe",
+            "string": "#ce9178",
+            "entity": "#d7ba7d",
+            "comment": "#6a9955",
+        },
+        "css": {
+            "tag": "#d7ba7d",
+            "class": "#d7ba7d",
+            "id": "#d7ba7d",
+            "prop": "#9cdcfe",
+            "val": "#b5cea8",
+            "string": "#ce9178",
+            "pseudo": "#d7ba7d",
+            "comment": "#6a9955",
+        }
+    },
+    "rzutnik": {
+        "name": "Rzutnik (Wysoki Kontrast)",
+        "app_qss": """
+            QMainWindow { background-color: #ffffff; color: #000000; }
+            QMenuBar { background-color: #e0e0e0; color: #000000; font-weight: bold; border-bottom: 2px solid #000000; }
+            QMenuBar::item:selected { background-color: #000000; color: #ffffff; }
+            QMenu { background-color: #ffffff; color: #000000; border: 2px solid #000000; font-weight: bold; }
+            QMenu::item:selected { background-color: #0000cc; color: #ffffff; }
+            QTabWidget::pane { border: 2px solid #000000; background-color: #ffffff; }
+            QTabBar::tab { background-color: #e0e0e0; color: #000000; font-weight: bold; padding: 6px 14px; border: 1px solid #000000; }
+            QTabBar::tab:selected { background-color: #ffffff; color: #000000; border-top: 4px solid #0000cc; }
+            QTabBar::tab:hover { background-color: #cccccc; }
+            QMessageBox { background-color: #ffffff; color: #000000; }
+        """,
+        "bg": "#ffffff",
+        "fg": "#000000",
+        "margin_bg": "#e6e6e6",
+        "margin_fg": "#000000",
+        "caret_line": "#e8f0fe",
+        "caret": "#000000",
+        "selection_bg": "#0033cc",
+        "selection_fg": "#ffffff",
+        "html": {
+            "tag": "#cc0000",
+            "attr": "#0000cc",
+            "string": "#007700",
+            "entity": "#bb4400",
+            "comment": "#555555",
+        },
+        "css": {
+            "tag": "#cc0000",
+            "class": "#770088",
+            "id": "#0000cc",
+            "prop": "#006666",
+            "val": "#bb4400",
+            "string": "#007700",
+            "pseudo": "#aa0000",
+            "comment": "#555555",
+        }
+    },
+    "dracula": {
+        "name": "Dracula",
+        "app_qss": """
+            QMainWindow { background-color: #282a36; color: #f8f8f2; }
+            QMenuBar { background-color: #21222c; color: #f8f8f2; border-bottom: 1px solid #6272a4; }
+            QMenuBar::item:selected { background-color: #44475a; color: #ff79c6; }
+            QMenu { background-color: #21222c; color: #f8f8f2; border: 1px solid #6272a4; }
+            QMenu::item:selected { background-color: #bd93f9; color: #282a36; font-weight: bold; }
+            QTabWidget::pane { border: 1px solid #6272a4; background-color: #282a36; }
+            QTabBar::tab { background-color: #21222c; color: #6272a4; padding: 6px 12px; border: 1px solid #282a36; }
+            QTabBar::tab:selected { background-color: #282a36; color: #f8f8f2; border-top: 2px solid #ff79c6; }
+            QTabBar::tab:hover { background-color: #44475a; color: #f8f8f2; }
+            QMessageBox { background-color: #21222c; color: #f8f8f2; }
+        """,
+        "bg": "#282a36",
+        "fg": "#f8f8f2",
+        "margin_bg": "#21222c",
+        "margin_fg": "#6272a4",
+        "caret_line": "#44475a",
+        "caret": "#f8f8f0",
+        "selection_bg": "#44475a",
+        "selection_fg": "#ffffff",
+        "html": {
+            "tag": "#ff79c6",
+            "attr": "#50fa7b",
+            "string": "#f1fa8c",
+            "entity": "#bd93f9",
+            "comment": "#6272a4",
+        },
+        "css": {
+            "tag": "#ff79c6",
+            "class": "#50fa7b",
+            "id": "#ffb86c",
+            "prop": "#8be9fd",
+            "val": "#bd93f9",
+            "string": "#f1fa8c",
+            "pseudo": "#50fa7b",
+            "comment": "#6272a4",
+        }
+    },
+    "solarized_light": {
+        "name": "Solarized Light",
+        "app_qss": """
+            QMainWindow { background-color: #fdf6e3; color: #657b83; }
+            QMenuBar { background-color: #eee8d5; color: #586e75; border-bottom: 1px solid #d33682; }
+            QMenuBar::item:selected { background-color: #d33682; color: #ffffff; }
+            QMenu { background-color: #eee8d5; color: #586e75; border: 1px solid #d33682; }
+            QMenu::item:selected { background-color: #268bd2; color: #ffffff; }
+            QTabWidget::pane { border: 1px solid #eee8d5; background-color: #fdf6e3; }
+            QTabBar::tab { background-color: #eee8d5; color: #93a1a1; padding: 6px 12px; border: 1px solid #fdf6e3; }
+            QTabBar::tab:selected { background-color: #fdf6e3; color: #657b83; border-top: 2px solid #268bd2; }
+            QTabBar::tab:hover { background-color: #e0d7c3; color: #586e75; }
+            QMessageBox { background-color: #eee8d5; color: #657b83; }
+        """,
+        "bg": "#fdf6e3",
+        "fg": "#657b83",
+        "margin_bg": "#eee8d5",
+        "margin_fg": "#93a1a1",
+        "caret_line": "#eee8d5",
+        "caret": "#657b83",
+        "selection_bg": "#eee8d5",
+        "selection_fg": "#073642",
+        "html": {
+            "tag": "#268bd2",
+            "attr": "#b58900",
+            "string": "#2aa198",
+            "entity": "#cb4b16",
+            "comment": "#93a1a1",
+        },
+        "css": {
+            "tag": "#268bd2",
+            "class": "#b58900",
+            "id": "#d33682",
+            "prop": "#859900",
+            "val": "#6c71c4",
+            "string": "#2aa198",
+            "pseudo": "#cb4b16",
+            "comment": "#93a1a1",
+        }
+    },
+    "gruvbox_dark": {
+        "name": "Gruvbox Dark",
+        "app_qss": """
+            QMainWindow { background-color: #282828; color: #ebdbb2; }
+            QMenuBar { background-color: #1d2021; color: #ebdbb2; border-bottom: 1px solid #504945; }
+            QMenuBar::item:selected { background-color: #3c3836; color: #fe8019; }
+            QMenu { background-color: #1d2021; color: #ebdbb2; border: 1px solid #504945; }
+            QMenu::item:selected { background-color: #d65d0e; color: #ffffff; }
+            QTabWidget::pane { border: 1px solid #504945; background-color: #282828; }
+            QTabBar::tab { background-color: #1d2021; color: #a89984; padding: 6px 12px; border: 1px solid #282828; }
+            QTabBar::tab:selected { background-color: #282828; color: #ebdbb2; border-top: 2px solid #fe8019; }
+            QTabBar::tab:hover { background-color: #3c3836; color: #ebdbb2; }
+            QMessageBox { background-color: #1d2021; color: #ebdbb2; }
+        """,
+        "bg": "#282828",
+        "fg": "#ebdbb2",
+        "margin_bg": "#1d2021",
+        "margin_fg": "#7c6f64",
+        "caret_line": "#3c3836",
+        "caret": "#ebdbb2",
+        "selection_bg": "#504945",
+        "selection_fg": "#fbf1c7",
+        "html": {
+            "tag": "#fb4934",
+            "attr": "#fabd2f",
+            "string": "#b8bb26",
+            "entity": "#d3869b",
+            "comment": "#928374",
+        },
+        "css": {
+            "tag": "#fb4934",
+            "class": "#fabd2f",
+            "id": "#fe8019",
+            "prop": "#8ec07c",
+            "val": "#d3869b",
+            "string": "#b8bb26",
+            "pseudo": "#83a598",
+            "comment": "#928374",
+        }
+    }
+}
+
+# --- KONFIGURACJA ŚCIEŻEK, USTAWIEŃ I LOGOWANIA ---
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".mkhtml_config.json")
+LOG_FILE = os.path.join(os.path.expanduser("~"), ".mkhtml.log")
+
+logging.basicConfig(
+    filename=LOG_FILE, 
+    level=logging.ERROR,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+def _excepthook(exc_type, exc, tb):
+    logging.error("Nieobsłużony wyjątek", exc_info=(exc_type, exc, tb))
+    if QApplication.instance():
+        QMessageBox.critical(
+            None, 
+            "mkHTML - Błąd", 
+            f"Wystąpił nieoczekiwany błąd:\n{exc}\n\nSzczegóły: {LOG_FILE}"
+        )
 
 def get_desktop_path():
-    """Pobiera ścieżkę do Pulpitu za pomocą wbudowanych mechanizmów Qt."""
     return QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DesktopLocation)
 
 def load_config():
-    """Wczytuje konfigurację (katalog roboczy, położenie i rozmiar okna)."""
     desktop_path = get_desktop_path()
     default_config = {
         "working_dir": desktop_path,
         "x": 100,
         "y": 100,
         "width": 950,
-        "height": 680
+        "height": 680,
+        "theme": "jasny"
     }
     
     if not os.path.exists(CONFIG_FILE):
@@ -48,6 +335,9 @@ def load_config():
                 if key not in config or not isinstance(config[key], int):
                     config[key] = default_config[key]
                     
+            if config.get("theme") not in THEMES:
+                config["theme"] = "jasny"
+                    
             config["x"] = max(0, config["x"])
             config["y"] = max(0, config["y"])
             
@@ -56,42 +346,48 @@ def load_config():
         return default_config
 
 def save_config(config_data):
-    """Zapisuje aktualną konfigurację do pliku w profilu użytkownika."""
     try:
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(config_data, f, indent=4)
     except Exception as e:
-        print(f"Błąd zapisu konfiguracji: {e}")
+        logging.error(f"Błąd zapisu konfiguracji: {e}")
 
 
 class MyCodeEditor(QsciScintilla):
     """Autorska klasa edytora z obsługą autouzupełniania tagów, klamer, wcięć i snippetów."""
     def __init__(self):
         super().__init__()
+        
+        if os.name == 'nt':
+            self.setEolMode(QsciScintilla.EolMode.EolWindows)
+        else:
+            self.setEolMode(QsciScintilla.EolMode.EolUnix)
+            
         self.current_file = None
         self.file_encoding = 'utf-8'
         self.void_tags = {'br', 'hr', 'img', 'input', 'meta', 'link', 'base', 'area', 'col', 'embed', 'param', 'source', 'track', 'wbr'}
         
-        # Prekompilacja wyrażeń regularnych
         self.rx_indent = re.compile(r'^([ \t]*)')
         self.rx_tag_trigger = re.compile(r'<?([a-zA-Z0-9-]+)>?\s*$')
-        self.rx_valid_tag = re.compile(r'^[a-zA-Z][a-zA-Z0-9-]*$')  # Tag musi zaczynać się od litery
+        self.rx_valid_tag = re.compile(r'^[a-zA-Z][a-zA-Z0-9-]*$')
         self.rx_close_tag = re.compile(r'<([a-zA-Z0-9-]+)[^>]*>$')
 
-        # Automatyczne zawijanie wierszy na słowach
         self.setWrapMode(QsciScintilla.WrapMode.WrapWord)
         self.setWrapVisualFlags(QsciScintilla.WrapVisualFlag.WrapFlagByText)
-        
-        # Wyrównanie zawiniętego tekstu do wcięcia pierwszej linii
         self.setWrapIndentMode(QsciScintilla.WrapIndentMode.WrapIndentSame)
+
+    def get_eol(self):
+        """Zwraca aktywny ciąg EOL ustawiony w edytorze."""
+        mode = self.eolMode()
+        return EOL.get(mode, '\n')
 
     def keyPressEvent(self, event):
         key = event.key()
         text = event.text()
 
         line, col = self.getCursorPosition()
+        eol = self.get_eol()
 
-        # Pobieranie tekstu linii tylko gdy zdarzenie wymaga analizy
         needs_line_parse = key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Tab) or text in ('{', '"', "'", '>')
         full_line_text = self.text(line) if needs_line_parse else ""
 
@@ -101,7 +397,7 @@ class MyCodeEditor(QsciScintilla):
                 indent_match = self.rx_indent.match(full_line_text)
                 indent_str = indent_match.group(1) if indent_match else ""
                 
-                self.insert(f"\n{indent_str}    \n{indent_str}")
+                self.insert(f"{eol}{indent_str}    {eol}{indent_str}")
                 self.setCursorPosition(line + 1, len(indent_str) + 4)
                 return
             
@@ -125,7 +421,6 @@ class MyCodeEditor(QsciScintilla):
                     is_html_mode = isinstance(self.lexer(), QsciLexerHTML)
                     is_valid_tag = bool(self.rx_valid_tag.match(word))
                     
-                    # Weryfikacja kontekstu składniowego
                     pos = self.SendScintilla(QsciScintilla.SCI_GETCURRENTPOS)
                     style = self.SendScintilla(QsciScintilla.SCI_GETSTYLEAT, max(0, pos - 1))
                     is_valid_context = not is_html_mode or style in (0, 1, 2)
@@ -154,10 +449,11 @@ class MyCodeEditor(QsciScintilla):
                         
                         if word in snippets:
                             snippet_text, line_offset, col_offset = snippets[word]
+                            snippet_text = snippet_text.replace('\n', eol)
                             
-                            if current_indent and '\n' in snippet_text:
-                                lines = snippet_text.split('\n')
-                                snippet_text = lines[0] + '\n' + '\n'.join(current_indent + l for l in lines[1:])
+                            if current_indent and eol in snippet_text:
+                                lines = snippet_text.split(eol)
+                                snippet_text = lines[0] + eol + eol.join(current_indent + l for l in lines[1:])
                                 
                             self.insert(snippet_text)
                             
@@ -187,7 +483,7 @@ class MyCodeEditor(QsciScintilla):
             indent_str = indent_match.group(1) if indent_match else ""
             
             super().keyPressEvent(event)
-            self.insert(f"\n{indent_str}    \n{indent_str}}}")
+            self.insert(f"{eol}{indent_str}    {eol}{indent_str}}}")
             self.setCursorPosition(line + 1, len(indent_str) + 4)
             return
 
@@ -229,9 +525,20 @@ class MkHTMLEditor(QMainWindow):
         super().__init__()
         self.config = load_config()
         self.working_dir = self.config.get("working_dir", get_desktop_path())
-        self.font = QFont("Consolas", 12)
+        self.current_theme = self.config.get("theme", "jasny")
         
-        self.setWindowTitle("mkHTML v1.0.1.7")
+        families = QFontDatabase.families()
+        modern_fonts = ["JetBrains Mono", "Fira Code", "Cascadia Code", "Hack", "Roboto Mono", "Consolas", "Courier New"]
+        chosen_font = "Consolas"
+        
+        for mf in modern_fonts:
+            if mf in families:
+                chosen_font = mf
+                break
+                
+        self.font = QFont(chosen_font, 12)
+        
+        self.setWindowTitle("mkHTML v1.0.1.15")
         
         if getattr(sys, 'frozen', False):
             if hasattr(sys, '_MEIPASS'):
@@ -271,59 +578,64 @@ class MkHTMLEditor(QMainWindow):
         self.tabs.currentChanged.connect(self.update_window_title)
         
         self.setCentralWidget(self.tabs)
-        self.create_menu()
+        self.setStyleSheet(THEMES.get(self.current_theme, THEMES["jasny"]).get("app_qss", ""))
         
+        self.create_menu()
         self.add_new_tab()
 
     def _atomic_save(self, file_path, content, encoding='utf-8'):
-        """Bezpieczny, zablokowany przed kolizjami zapis pliku (Path-safe, AV-safe)."""
-        abs_file_path = os.path.abspath(file_path)
-        dir_name = os.path.dirname(abs_file_path)
-        
-        fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".mkhtml_save_", suffix=".tmp")
-        
+        """Bezpieczny, zablokowany przed kolizjami zapis pliku z zachowaniem uprawnień i fsync."""
+        target = os.path.realpath(file_path)
+        fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(target),
+                                        prefix=".mkhtml_save_", suffix=".tmp")
         try:
             try:
-                f = os.fdopen(fd, 'w', encoding=encoding)
+                f = os.fdopen(fd, 'w', encoding=encoding, newline='')
             except Exception:
                 os.close(fd)
                 raise
-            
+
             with f:
                 f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
 
-            try:
-                os.replace(tmp_path, abs_file_path)
-            except OSError:
-                time.sleep(0.1)
-                os.replace(tmp_path, abs_file_path)
+            if os.path.exists(target):
+                shutil.copymode(target, tmp_path)
 
-        except Exception as e:
-            if os.path.exists(tmp_path):
+            for attempt in range(5):
                 try:
-                    os.remove(tmp_path)
-                except OSError:
-                    pass
-            raise e
+                    os.replace(tmp_path, target)
+                    return
+                except PermissionError:
+                    if attempt == 4:
+                        raise
+                    time.sleep(0.1 * (attempt + 1))
+
+        except Exception:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def save_app_config(self):
-        """Zapisuje bieżący katalog roboczy oraz geometrię okna na dysku."""
         geom = self.geometry()
         config_data = {
             "working_dir": self.working_dir,
             "x": geom.x(),
             "y": geom.y(),
             "width": geom.width(),
-            "height": geom.height()
+            "height": geom.height(),
+            "theme": self.current_theme
         }
         save_config(config_data)
 
     def current_editor(self) -> MyCodeEditor:
-        """Zwraca aktywny edytor w bieżącej zakładce."""
         return self.tabs.currentWidget()
 
-    def add_new_tab(self, file_path=None, content=""):
-        """Dodaje nową zakładkę z edytorem."""
+    def add_new_tab(self, file_path=None, content="", encoding='utf-8', eol_mode=None):
+        """Dodaje nową zakładkę z konfiguracją kodowania i końców linii."""
         editor = MyCodeEditor()
         editor.setUtf8(True)
         editor.setFont(self.font)
@@ -332,6 +644,11 @@ class MkHTMLEditor(QMainWindow):
         editor.setMarginLineNumbers(0, True)
         
         editor.current_file = file_path
+        editor.file_encoding = encoding
+        
+        if eol_mode is not None:
+            editor.setEolMode(eol_mode)
+            
         if content:
             editor.setText(content)
             
@@ -349,7 +666,6 @@ class MkHTMLEditor(QMainWindow):
         return editor
 
     def on_modification_changed(self, editor, modified):
-        """Dodaje lub usuwa gwiazdkę (*) z tytułu zakładki przy zmianach."""
         idx = self.tabs.indexOf(editor)
         if idx != -1:
             base_name = os.path.basename(editor.current_file) if editor.current_file else "Nowy plik"
@@ -358,63 +674,76 @@ class MkHTMLEditor(QMainWindow):
             self.update_window_title()
 
     def update_window_title(self):
-        """Aktualizuje tytuł głównego okna aplikacji."""
         editor = self.current_editor()
         if editor:
             file_str = editor.current_file if editor.current_file else "Nowy plik"
             mod_str = " *" if editor.isModified() else ""
-            self.setWindowTitle(f"mkHTML v1.0.1.7 - {file_str}{mod_str}")
+            self.setWindowTitle(f"mkHTML v1.0.1.15 - {file_str}{mod_str}")
         else:
-            self.setWindowTitle("mkHTML v1.0.1.7")
+            self.setWindowTitle("mkHTML v1.0.1.15")
 
     def update_lexer_for_editor(self, editor):
-        """Ustawia odpowiedni lexer (HTML/CSS/Brak) oraz czyści stary z pamięci."""
+        theme_data = THEMES.get(self.current_theme, THEMES["jasny"])
         old_lexer = editor.lexer()
+
+        def reset_lexer_styles(lex):
+            bg_color = QColor(theme_data["bg"])
+            fg_color = QColor(theme_data["fg"])
+            for i in range(128):
+                lex.setColor(fg_color, i)
+                lex.setPaper(bg_color, i)
+                lex.setFont(self.font, i)
 
         def set_color(lex, hex_color, cls_ref, *attrs):
             for attr in attrs:
                 if hasattr(cls_ref, attr):
                     lex.setColor(QColor(hex_color), getattr(cls_ref, attr))
+                    lex.setPaper(QColor(theme_data["bg"]), getattr(cls_ref, attr))
 
         def apply_html_lexer():
             lexer = QsciLexerHTML(editor)
-            lexer.setDefaultFont(self.font)
-            lexer.setDefaultColor(QColor("#24292e"))
+            reset_lexer_styles(lexer)
             
-            set_color(lexer, "#005cc5", QsciLexerHTML, 'Tag', 'UnknownTag')
-            set_color(lexer, "#6f42c1", QsciLexerHTML, 'Attribute', 'UnknownAttribute')
-            set_color(lexer, "#22863a", QsciLexerHTML, 'HTMLDoubleQuotedString', 'HTMLSingleQuotedString')
-            set_color(lexer, "#e36209", QsciLexerHTML, 'Entity')
+            html_colors = theme_data["html"]
+            set_color(lexer, html_colors["tag"], QsciLexerHTML, 'Tag', 'UnknownTag')
+            set_color(lexer, html_colors["attr"], QsciLexerHTML, 'Attribute', 'UnknownAttribute')
+            set_color(lexer, html_colors["string"], QsciLexerHTML, 'HTMLDoubleQuotedString', 'HTMLSingleQuotedString')
+            set_color(lexer, html_colors["entity"], QsciLexerHTML, 'Entity')
             
             if hasattr(QsciLexerHTML, 'HTMLComment'):
                 comment_font = QFont(self.font)
                 comment_font.setItalic(True)
-                lexer.setColor(QColor("#6a737d"), QsciLexerHTML.HTMLComment)
+                lexer.setColor(QColor(html_colors["comment"]), QsciLexerHTML.HTMLComment)
+                lexer.setPaper(QColor(theme_data["bg"]), QsciLexerHTML.HTMLComment)
                 lexer.setFont(comment_font, QsciLexerHTML.HTMLComment)
+            return lexer
+
+        def apply_css_lexer():
+            lexer = QsciLexerCSS(editor)
+            reset_lexer_styles(lexer)
+            
+            css_colors = theme_data["css"]
+            set_color(lexer, css_colors["tag"], QsciLexerCSS, 'Tag')
+            set_color(lexer, css_colors["class"], QsciLexerCSS, 'ClassSelector')
+            set_color(lexer, css_colors["id"], QsciLexerCSS, 'IDSelector')
+            set_color(lexer, css_colors["prop"], QsciLexerCSS, 'CSS1Property', 'CSS2Property', 'CSS3Property', 'UnknownProperty')
+            set_color(lexer, css_colors["val"], QsciLexerCSS, 'Value')
+            set_color(lexer, css_colors["string"], QsciLexerCSS, 'DoubleQuotedString', 'SingleQuotedString', 'String')
+            set_color(lexer, css_colors["pseudo"], QsciLexerCSS, 'PseudoClass')
+            
+            if hasattr(QsciLexerCSS, 'Comment'):
+                comment_font = QFont(self.font)
+                comment_font.setItalic(True)
+                lexer.setColor(QColor(css_colors["comment"]), QsciLexerCSS.Comment)
+                lexer.setPaper(QColor(theme_data["bg"]), QsciLexerCSS.Comment)
+                lexer.setFont(comment_font, QsciLexerCSS.Comment)
             return lexer
 
         new_lexer = None
         if editor.current_file:
             lower_path = editor.current_file.lower()
             if lower_path.endswith('.css'):
-                lexer = QsciLexerCSS(editor)
-                lexer.setDefaultFont(self.font)
-                lexer.setDefaultColor(QColor("#24292e"))
-                
-                set_color(lexer, "#d73a49", QsciLexerCSS, 'Tag')
-                set_color(lexer, "#6f42c1", QsciLexerCSS, 'ClassSelector')
-                set_color(lexer, "#005cc5", QsciLexerCSS, 'IDSelector')
-                set_color(lexer, "#008080", QsciLexerCSS, 'CSS1Property', 'CSS2Property', 'CSS3Property', 'UnknownProperty')
-                set_color(lexer, "#e36209", QsciLexerCSS, 'Value')
-                set_color(lexer, "#22863a", QsciLexerCSS, 'DoubleQuotedString', 'SingleQuotedString', 'String')
-                set_color(lexer, "#9e1c23", QsciLexerCSS, 'PseudoClass')
-                
-                if hasattr(QsciLexerCSS, 'Comment'):
-                    comment_font = QFont(self.font)
-                    comment_font.setItalic(True)
-                    lexer.setColor(QColor("#6a737d"), QsciLexerCSS.Comment)
-                    lexer.setFont(comment_font, QsciLexerCSS.Comment)
-                new_lexer = lexer
+                new_lexer = apply_css_lexer()
             elif lower_path.endswith(('.html', '.htm')):
                 new_lexer = apply_html_lexer()
         else:
@@ -424,6 +753,17 @@ class MkHTMLEditor(QMainWindow):
         if old_lexer is not None:
             old_lexer.deleteLater()
 
+        editor.setPaper(QColor(theme_data["bg"]))
+        editor.setColor(QColor(theme_data["fg"]))
+        editor.setCaretForegroundColor(QColor(theme_data["caret"]))
+        editor.setCaretLineVisible(True)
+        editor.setCaretLineBackgroundColor(QColor(theme_data["caret_line"]))
+        editor.setSelectionBackgroundColor(QColor(theme_data["selection_bg"]))
+        editor.setSelectionForegroundColor(QColor(theme_data["selection_fg"]))
+        
+        editor.setMarginsBackgroundColor(QColor(theme_data["margin_bg"]))
+        editor.setMarginsForegroundColor(QColor(theme_data["margin_fg"]))
+
         editor.setIndentationsUseTabs(False)
         editor.setTabWidth(4)
         editor.setIndentationWidth(4)
@@ -431,8 +771,25 @@ class MkHTMLEditor(QMainWindow):
         editor.setAutoIndent(True)
         editor.setBackspaceUnindents(True)
 
+    def set_theme(self, theme_key):
+        if theme_key not in THEMES:
+            return
+            
+        self.current_theme = theme_key
+        
+        for tk, action in self.theme_actions.items():
+            action.setChecked(tk == theme_key)
+            
+        self.setStyleSheet(THEMES[theme_key].get("app_qss", ""))
+        
+        for i in range(self.tabs.count()):
+            editor = self.tabs.widget(i)
+            if editor:
+                self.update_lexer_for_editor(editor)
+                
+        self.save_app_config()
+
     def _add_action(self, parent_menu, text, slot, shortcut=None):
-        """Metoda pomocnicza do tworzenia i dodawania akcji do menu."""
         action = QAction(text, self)
         if shortcut:
             action.setShortcut(shortcut)
@@ -459,6 +816,16 @@ class MkHTMLEditor(QMainWindow):
         self._add_action(edit_menu, "Kopiuj", lambda: self.current_editor() and self.current_editor().copy(), QKeySequence.StandardKey.Copy)
         self._add_action(edit_menu, "Wklej", lambda: self.current_editor() and self.current_editor().paste(), QKeySequence.StandardKey.Paste)
 
+        theme_menu = menu_bar.addMenu("Motyw")
+        self.theme_actions = {}
+        for theme_key, theme_info in THEMES.items():
+            action = QAction(theme_info["name"], self)
+            action.setCheckable(True)
+            action.setChecked(theme_key == self.current_theme)
+            action.triggered.connect(lambda checked, tk=theme_key: self.set_theme(tk))
+            theme_menu.addAction(action)
+            self.theme_actions[theme_key] = action
+
         self._add_action(menu_bar, "Podgląd", self.run_in_browser, QKeySequence("F5"))
 
         visit_menu = menu_bar.addMenu("Odwiedź...")
@@ -467,7 +834,6 @@ class MkHTMLEditor(QMainWindow):
         self._add_action(visit_menu, "Zrelaksuj się", lambda: webbrowser.open("https://www.youtube.com/@StaryDooh"))
 
     def maybe_save_tab(self, index):
-        """Weryfikuje niezapisane zmiany w konkretnej zakładce."""
         editor = self.tabs.widget(index)
         if not editor or not editor.isModified():
             return True
@@ -494,7 +860,6 @@ class MkHTMLEditor(QMainWindow):
         return True
 
     def close_tab(self, index):
-        """Zamyka zakładkę po ewentualnym zapisaniu zmian i zwalnia pamięć edytora."""
         if self.maybe_save_tab(index):
             editor = self.tabs.widget(index)
             self.tabs.removeTab(index)
@@ -504,7 +869,6 @@ class MkHTMLEditor(QMainWindow):
                 self.add_new_tab()
 
     def closeEvent(self, event):
-        """Zamykanie całego programu - sprawdza wszystkie zakładki i zapisuje konfigurację."""
         for i in range(self.tabs.count() - 1, -1, -1):
             if not self.maybe_save_tab(i):
                 event.ignore()
@@ -525,73 +889,63 @@ class MkHTMLEditor(QMainWindow):
             
         if editor.current_file:
             if editor.current_file.lower().endswith(('.html', '.htm')):
-                if editor.isModified():
-                    self.save_file()
-                url = QUrl.fromLocalFile(os.path.abspath(editor.current_file)).toString()
-                webbrowser.open(url)
+                if editor.isModified() and not self.save_file():
+                    return
+                
+                safe_url = Path(editor.current_file).resolve().as_uri()
+                webbrowser.open(safe_url)
             else:
                 QMessageBox.warning(self, "Uwaga", "Możesz uruchomić w przeglądarce tylko pliki HTML.")
 
     def new_file(self):
-        """Tworzy nową zakładkę z nowym plikiem."""
         self.add_new_tab()
 
     def open_file(self):
-        """Otwiera plik w nowej zakładce (lub przełącza na istniejącą, jeśli plik jest już otwarty)."""
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Otwórz plik", self.working_dir, "Pliki Web (*.html *.htm *.css);;Wszystkie pliki (*)"
         )
-        if file_path:
-            # Weryfikacja duplikatów z pełną szczelnością (case-insensitivity, symlinki)
-            for i in range(self.tabs.count()):
-                editor = self.tabs.widget(i)
-                if editor and editor.current_file:
-                    is_duplicate = False
-                    try:
-                        # os.path.samefile sprawdza fizyczny obiekt pliku z pominięciem różnic logicznych
-                        if os.path.samefile(file_path, editor.current_file):
-                            is_duplicate = True
-                    except FileNotFoundError:
-                        # Fallback dla plików usuniętych z dysku w trakcie ich otwarcia w edytorze
-                        if os.path.normcase(os.path.abspath(file_path)) == os.path.normcase(os.path.abspath(editor.current_file)):
-                            is_duplicate = True
-                            
-                    if is_duplicate:
-                        self.tabs.setCurrentIndex(i)
-                        return
+        if not file_path:
+            return
 
-            try:
-                encoding_used = 'utf-8'
+        for i in range(self.tabs.count()):
+            editor = self.tabs.widget(i)
+            if editor and editor.current_file:
+                is_duplicate = False
                 try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                except UnicodeDecodeError:
-                    try:
-                        with open(file_path, 'r', encoding='cp1250') as f:
-                            content = f.read()
-                        encoding_used = 'cp1250'
-                    except UnicodeDecodeError:
-                        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                            content = f.read()
+                    if os.path.samefile(file_path, editor.current_file):
+                        is_duplicate = True
+                except (FileNotFoundError, OSError):
+                    if os.path.normcase(os.path.abspath(file_path)) == os.path.normcase(os.path.abspath(editor.current_file)):
+                        is_duplicate = True
+                        
+                if is_duplicate:
+                    self.tabs.setCurrentIndex(i)
+                    return
 
-                editor = self.current_editor()
-                if editor and editor.current_file is None and not editor.isModified() and editor.text() == "":
-                    editor.setText(content)
-                    editor.current_file = file_path
-                    editor.file_encoding = encoding_used
-                    self.update_lexer_for_editor(editor)
-                    editor.setModified(False)
-                    idx = self.tabs.currentIndex()
-                    self.tabs.setTabText(idx, os.path.basename(file_path))
-                    self.update_window_title()
-                else:
-                    new_editor = self.add_new_tab(file_path=file_path, content=content)
-                    new_editor.file_encoding = encoding_used
+        try:
+            content, encoding, eol_mode = read_text_file(file_path)
+            
+            curr_ed = self.current_editor()
+            should_close_empty = (
+                curr_ed is not None and 
+                curr_ed.current_file is None and 
+                not curr_ed.isModified() and 
+                curr_ed.text() == ""
+            )
+            empty_tab_idx = self.tabs.currentIndex() if should_close_empty else -1
 
-                self.working_dir = os.path.dirname(os.path.abspath(file_path))
+            self.add_new_tab(file_path=file_path, content=content, encoding=encoding, eol_mode=eol_mode)
 
-            except Exception as e:
-                QMessageBox.critical(self, "Błąd", f"Nie udało się otworzyć pliku:\n{e}")
+            if should_close_empty and empty_tab_idx != -1:
+                old_editor = self.tabs.widget(empty_tab_idx)
+                self.tabs.removeTab(empty_tab_idx)
+                if old_editor:
+                    old_editor.deleteLater()
+
+            self.working_dir = os.path.dirname(os.path.abspath(file_path))
+
+        except Exception as e:
+            QMessageBox.critical(self, "Błąd otwarcia pliku", f"Nie udało się otworzyć pliku:\n{e}")
 
     def save_file(self):
         editor = self.current_editor()
@@ -607,42 +961,84 @@ class MkHTMLEditor(QMainWindow):
                     self.tabs.setTabText(idx, os.path.basename(editor.current_file))
                 self.update_window_title()
                 return True
+            except UnicodeEncodeError:
+                reply = QMessageBox.question(
+                    self,
+                    "Błąd kodowania znaków",
+                    f"Plik zawiera znaki, których nie można zapisać w kodowaniu {editor.file_encoding}.\n"
+                    f"Czy chcesz zmienić kodowanie pliku na UTF-8 i zapisać?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    editor.file_encoding = 'utf-8'
+                    return self.save_file()
+                return False
             except Exception as e:
                 QMessageBox.critical(self, "Błąd", f"Nie udało się zapisać pliku:\n{e}")
                 return False
         else:
             return self.save_file_as()
 
-    def save_file_as(self):
+    def save_file_as(self, *args):
         editor = self.current_editor()
         if not editor:
             return False
 
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "Zapisz plik jako", self.working_dir, "Pliki HTML (*.html *.htm);;Pliki CSS (*.css);;Wszystkie pliki (*)"
-        )
-        if file_path:
-            editor.current_file = file_path
-            try:
-                self._atomic_save(editor.current_file, editor.text(), encoding=editor.file_encoding)
-                editor.setModified(False)
-                self.update_lexer_for_editor(editor)
-                
-                idx = self.tabs.indexOf(editor)
-                if idx != -1:
-                    self.tabs.setTabText(idx, os.path.basename(file_path))
-                    
-                self.update_window_title()
-                self.working_dir = os.path.dirname(os.path.abspath(file_path))
-                return True
-            except Exception as e:
-                QMessageBox.critical(self, "Błąd", f"Nie udało się zapisać pliku:\n{e}")
+        if args and isinstance(args[0], str):
+            file_path = args[0]
+            selected_filter = ""
+        else:
+            file_path, selected_filter = QFileDialog.getSaveFileName(
+                self, "Zapisz plik jako", self.working_dir, "Pliki HTML (*.html *.htm);;Pliki CSS (*.css);;Wszystkie pliki (*)"
+            )
+            
+            if not file_path:
                 return False
-        return False
+
+            if not os.path.splitext(file_path)[1]:
+                if 'HTML' in selected_filter:
+                    file_path += '.html'
+                elif 'CSS' in selected_filter:
+                    file_path += '.css'
+
+        try:
+            self._atomic_save(file_path, editor.text(), encoding=editor.file_encoding)
+            
+            editor.current_file = file_path
+            editor.setModified(False)
+            self.update_lexer_for_editor(editor)
+            
+            idx = self.tabs.indexOf(editor)
+            if idx != -1:
+                self.tabs.setTabText(idx, os.path.basename(file_path))
+                
+            self.update_window_title()
+            self.working_dir = os.path.dirname(os.path.abspath(file_path))
+            return True
+            
+        except UnicodeEncodeError:
+            reply = QMessageBox.question(
+                self,
+                "Błąd kodowania znaków",
+                f"Plik zawiera znaki, których nie można zapisać w kodowaniu {editor.file_encoding}.\n"
+                f"Czy chcesz zmienić kodowanie pliku na UTF-8 i zapisać?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                editor.file_encoding = 'utf-8'
+                return self.save_file_as(file_path)
+            return False
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Błąd", f"Nie udało się zapisać pliku:\n{e}")
+            return False
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    sys.excepthook = _excepthook
     window = MkHTMLEditor()
     window.show()
     sys.exit(app.exec())
