@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QFileDialog, QMessageBox, QTabWidget
 )
 from PyQt6.QtGui import QFont, QFontDatabase, QAction, QKeySequence, QColor, QIcon
-from PyQt6.QtCore import Qt, QUrl, QStandardPaths, QRect
+from PyQt6.QtCore import Qt, QStandardPaths, QRect
 from PyQt6.Qsci import QsciScintilla, QsciLexerHTML, QsciLexerCSS
 
 # --- MAPOWANIE EOL ---
@@ -28,7 +28,7 @@ def read_text_file(path):
     raw = Path(path).read_bytes()
     if b'\x00' in raw[:8192]:
         raise ValueError("Plik wygląda na plik binarny (wykryto bajty NUL).")
-        
+    
     order = ('utf-8-sig', 'cp1250') if raw.startswith(codecs.BOM_UTF8) else ('utf-8', 'cp1250')
     for enc in order:
         try:
@@ -38,17 +38,16 @@ def read_text_file(path):
             continue
     else:
         raise ValueError("Nie rozpoznano kodowania pliku (obsługiwane: UTF-8 / Windows-1250).")
-        
+    
     crlf = text.count('\r\n')
     lf = text.count('\n') - crlf
     
     if crlf or lf:
-        mode = (QsciScintilla.EolMode.EolWindows if crlf >= lf
-                else QsciScintilla.EolMode.EolUnix)
+        mode = (QsciScintilla.EolMode.EolWindows if crlf >= lf else QsciScintilla.EolMode.EolUnix)
         text = re.sub(r'\r\n|\r|\n', EOL[mode], text)
     else:
         mode = QsciScintilla.EolMode.EolWindows if os.name == 'nt' else QsciScintilla.EolMode.EolUnix
-        
+    
     return text, enc, mode
 
 # --- DEFINICJE MOTYWÓW ---
@@ -288,11 +287,14 @@ THEMES = {
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".mkhtml_config.json")
 LOG_FILE = os.path.join(os.path.expanduser("~"), ".mkhtml.log")
 
-logging.basicConfig(
-    filename=LOG_FILE, 
-    level=logging.ERROR,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+try:
+    logging.basicConfig(
+        filename=LOG_FILE, 
+        level=logging.ERROR,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+except OSError:
+    logging.basicConfig(level=logging.ERROR)
 
 def _excepthook(exc_type, exc, tb):
     logging.error("Nieobsłużony wyjątek", exc_info=(exc_type, exc, tb))
@@ -324,24 +326,24 @@ def load_config():
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
             config = json.load(f)
-            if not isinstance(config, dict):
-                return default_config
-            
-            saved_dir = config.get("working_dir", desktop_path)
-            if not os.path.exists(saved_dir):
-                config["working_dir"] = desktop_path
-            
-            for key in ["x", "y", "width", "height"]:
-                if key not in config or not isinstance(config[key], int):
-                    config[key] = default_config[key]
-                    
-            if config.get("theme") not in THEMES:
-                config["theme"] = "jasny"
-                    
-            config["x"] = max(0, config["x"])
-            config["y"] = max(0, config["y"])
-            
-            return config
+        if not isinstance(config, dict):
+            return default_config
+        
+        saved_dir = config.get("working_dir", desktop_path)
+        if not os.path.exists(saved_dir):
+            config["working_dir"] = desktop_path
+        
+        for key in ["x", "y", "width", "height"]:
+            if key not in config or not isinstance(config[key], int):
+                config[key] = default_config[key]
+        
+        if config.get("theme") not in THEMES:
+            config["theme"] = "jasny"
+        
+        config["x"] = max(0, config["x"])
+        config["y"] = max(0, config["y"])
+        
+        return config
     except Exception:
         return default_config
 
@@ -362,14 +364,26 @@ class MyCodeEditor(QsciScintilla):
             self.setEolMode(QsciScintilla.EolMode.EolWindows)
         else:
             self.setEolMode(QsciScintilla.EolMode.EolUnix)
-            
+        
         self.current_file = None
         self.file_encoding = 'utf-8'
         self.void_tags = {'br', 'hr', 'img', 'input', 'meta', 'link', 'base', 'area', 'col', 'embed', 'param', 'source', 'track', 'wbr'}
         
+        self.known_tags = {
+            'a', 'abbr', 'address', 'area', 'article', 'aside', 'audio', 'b', 'base', 'bdi', 'bdo', 'blockquote',
+            'body', 'br', 'button', 'canvas', 'caption', 'cite', 'code', 'col', 'colgroup', 'data', 'datalist',
+            'dd', 'del', 'details', 'dfn', 'dialog', 'div', 'dl', 'dt', 'em', 'embed', 'fieldset', 'figcaption',
+            'figure', 'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head', 'header', 'hgroup', 'hr',
+            'html', 'i', 'iframe', 'img', 'input', 'ins', 'kbd', 'label', 'legend', 'li', 'link', 'main', 'map',
+            'mark', 'meta', 'meter', 'nav', 'noscript', 'object', 'ol', 'optgroup', 'option', 'output', 'p',
+            'param', 'picture', 'pre', 'progress', 'q', 'rp', 'rt', 'ruby', 's', 'samp', 'script', 'section',
+            'select', 'small', 'source', 'span', 'strong', 'style', 'sub', 'summary', 'sup', 'svg', 'table',
+            'tbody', 'td', 'template', 'textarea', 'tfoot', 'th', 'thead', 'time', 'title', 'tr', 'track', 'u',
+            'ul', 'var', 'video', 'wbr'
+        }
+        
         self.rx_indent = re.compile(r'^([ \t]*)')
         self.rx_tag_trigger = re.compile(r'<?([a-zA-Z0-9-]+)>?\s*$')
-        self.rx_valid_tag = re.compile(r'^[a-zA-Z][a-zA-Z0-9-]*$')
         self.rx_close_tag = re.compile(r'<([a-zA-Z0-9-]+)[^>]*>$')
 
         self.setWrapMode(QsciScintilla.WrapMode.WrapWord)
@@ -419,7 +433,7 @@ class MyCodeEditor(QsciScintilla):
                     start_col = max(0, col - replace_len)
                     
                     is_html_mode = isinstance(self.lexer(), QsciLexerHTML)
-                    is_valid_tag = bool(self.rx_valid_tag.match(word))
+                    is_valid_tag = word in self.known_tags
                     
                     pos = self.SendScintilla(QsciScintilla.SCI_GETCURRENTPOS)
                     style = self.SendScintilla(QsciScintilla.SCI_GETSTYLEAT, max(0, pos - 1))
@@ -454,7 +468,7 @@ class MyCodeEditor(QsciScintilla):
                             if current_indent and eol in snippet_text:
                                 lines = snippet_text.split(eol)
                                 snippet_text = lines[0] + eol + eol.join(current_indent + l for l in lines[1:])
-                                
+                            
                             self.insert(snippet_text)
                             
                             if line_offset == 0:
@@ -462,7 +476,7 @@ class MyCodeEditor(QsciScintilla):
                             else:
                                 self.setCursorPosition(line + line_offset, len(current_indent) + col_offset)
                             return
-                            
+                        
                         elif word in self.void_tags:
                             tag_text = f"<{word}>"
                             self.insert(tag_text)
@@ -479,6 +493,15 @@ class MyCodeEditor(QsciScintilla):
 
         # 2. OBSŁUGA ZAMYKANIA KLAMER DLA CSS ({)
         if text == '{' and isinstance(self.lexer(), QsciLexerCSS):
+            # Otaczanie zaznaczonego tekstu klamrami
+            if self.hasSelectedText():
+                line_from, index_from, line_to, index_to = self.getSelection()
+                sel_text = self.selectedText()
+                self.replaceSelectedText("{" + sel_text + "}")
+                if line_from == line_to:
+                    self.setSelection(line_from, index_from, line_to, index_to + 2)
+                return
+
             indent_match = self.rx_indent.match(full_line_text)
             indent_str = indent_match.group(1) if indent_match else ""
             
@@ -489,10 +512,27 @@ class MyCodeEditor(QsciScintilla):
 
         # 3. OBSŁUGA CUDZYSŁOWÓW I APOSTROFÓW (" oraz ')
         if text in ['"', "'"]:
+            # Otaczanie zaznaczonego tekstu znakami
+            if self.hasSelectedText():
+                line_from, index_from, line_to, index_to = self.getSelection()
+                sel_text = self.selectedText()
+                self.replaceSelectedText(text + sel_text + text)
+                if line_from == line_to:
+                    self.setSelection(line_from, index_from, line_to, index_to + 2)
+                return
+
+            # Wychodzenie za znak, jeśli wpisujemy to samo przed zamykającym znakiem
             if col < len(full_line_text) and full_line_text[col] == text:
                 self.setCursorPosition(line, col + 1)
                 return
             
+            # Zabezpieczenie przed podwójnym apostrofem w kontrakcjach (np. don't)
+            char_before = full_line_text[col-1] if col > 0 else ''
+            if char_before.isalnum():
+                super().keyPressEvent(event)
+                return
+            
+            # Standardowe autozamykanie
             super().keyPressEvent(event)
             self.insert(text)
             self.setCursorPosition(line, col + 1)
@@ -500,20 +540,31 @@ class MyCodeEditor(QsciScintilla):
 
         # 4. OBSŁUGA AUTOMATYCZNEGO ZAMYKANIA ZNACZNIKÓW HTML (>)
         if text == '>':
+            # Jeśli jest zaznaczony tekst, po prostu go nadpisujemy, pomijając autozamykanie tagów
+            if self.hasSelectedText():
+                super().keyPressEvent(event)
+                return
+                
             search_start = max(0, col - 200)
             chunk_before_cursor = full_line_text[search_start:col] + '>'
             
             super().keyPressEvent(event)
             
-            match = self.rx_close_tag.search(chunk_before_cursor)
-            if match:
-                inner_content = match.group(0)[:-1].rstrip()
-                if not inner_content.endswith('/'):
-                    tag_name = match.group(1).lower()
-                    if tag_name not in self.void_tags:
-                        closing_tag = f"</{tag_name}>"
-                        self.insert(closing_tag)
-                        self.setCursorPosition(line, col + 1)
+            # Weryfikacja lexera (tylko w HTML)
+            if isinstance(self.lexer(), QsciLexerHTML):
+                match = self.rx_close_tag.search(chunk_before_cursor)
+                if match:
+                    inner_content = match.group(0)[:-1].rstrip()
+                    if not inner_content.endswith('/'):
+                        tag_name = match.group(1).lower()
+                        
+                        pos = self.SendScintilla(QsciScintilla.SCI_GETCURRENTPOS)
+                        style_before = self.SendScintilla(QsciScintilla.SCI_GETSTYLEAT, max(0, pos - 2))
+                        
+                        if tag_name in self.known_tags and tag_name not in self.void_tags and style_before < 40:
+                            closing_tag = f"</{tag_name}>"
+                            self.insert(closing_tag)
+                            self.setCursorPosition(line, col + 1)
             return
 
         super().keyPressEvent(event)
@@ -535,10 +586,10 @@ class MkHTMLEditor(QMainWindow):
             if mf in families:
                 chosen_font = mf
                 break
-                
+        
         self.font = QFont(chosen_font, 12)
         
-        self.setWindowTitle("mkHTML v1.0.1.15")
+        self.setWindowTitle("mkHTML v1.0.2.4")
         
         if getattr(sys, 'frozen', False):
             if hasattr(sys, '_MEIPASS'):
@@ -547,7 +598,7 @@ class MkHTMLEditor(QMainWindow):
                 base_dir = os.path.dirname(sys.executable)
         else:
             base_dir = os.path.dirname(os.path.abspath(__file__))
-            
+        
         icon_path = os.path.join(base_dir, "ikona.ico")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
@@ -564,12 +615,12 @@ class MkHTMLEditor(QMainWindow):
             if intersection.width() >= 100 and intersection.height() >= 100:
                 is_visible = True
                 break
-                
+        
         if not is_visible:
             primary_geom = QApplication.primaryScreen().availableGeometry()
             x = primary_geom.x() + (primary_geom.width() - w) // 2
             y = primary_geom.y() + (primary_geom.height() - h) // 2
-            
+        
         self.setGeometry(x, y, w, h)
         
         self.tabs = QTabWidget()
@@ -648,10 +699,10 @@ class MkHTMLEditor(QMainWindow):
         
         if eol_mode is not None:
             editor.setEolMode(eol_mode)
-            
+        
         if content:
             editor.setText(content)
-            
+        
         self.update_lexer_for_editor(editor)
         editor.setModified(False)
         
@@ -678,9 +729,9 @@ class MkHTMLEditor(QMainWindow):
         if editor:
             file_str = editor.current_file if editor.current_file else "Nowy plik"
             mod_str = " *" if editor.isModified() else ""
-            self.setWindowTitle(f"mkHTML v1.0.1.15 - {file_str}{mod_str}")
+            self.setWindowTitle(f"mkHTML v1.0.2.4 - {file_str}{mod_str}")
         else:
-            self.setWindowTitle("mkHTML v1.0.1.15")
+            self.setWindowTitle("mkHTML v1.0.2.4")
 
     def update_lexer_for_editor(self, editor):
         theme_data = THEMES.get(self.current_theme, THEMES["jasny"])
@@ -740,12 +791,8 @@ class MkHTMLEditor(QMainWindow):
             return lexer
 
         new_lexer = None
-        if editor.current_file:
-            lower_path = editor.current_file.lower()
-            if lower_path.endswith('.css'):
-                new_lexer = apply_css_lexer()
-            elif lower_path.endswith(('.html', '.htm')):
-                new_lexer = apply_html_lexer()
+        if editor.current_file and editor.current_file.lower().endswith('.css'):
+            new_lexer = apply_css_lexer()
         else:
             new_lexer = apply_html_lexer()
 
@@ -774,19 +821,19 @@ class MkHTMLEditor(QMainWindow):
     def set_theme(self, theme_key):
         if theme_key not in THEMES:
             return
-            
+        
         self.current_theme = theme_key
         
         for tk, action in self.theme_actions.items():
             action.setChecked(tk == theme_key)
-            
+        
         self.setStyleSheet(THEMES[theme_key].get("app_qss", ""))
         
         for i in range(self.tabs.count()):
             editor = self.tabs.widget(i)
             if editor:
                 self.update_lexer_for_editor(editor)
-                
+        
         self.save_app_config()
 
     def _add_action(self, parent_menu, text, slot, shortcut=None):
@@ -856,7 +903,7 @@ class MkHTMLEditor(QMainWindow):
             return self.save_file()
         elif clicked == btn_cancel:
             return False
-            
+        
         return True
 
     def close_tab(self, index):
@@ -886,7 +933,7 @@ class MkHTMLEditor(QMainWindow):
             QMessageBox.information(self, "Zapisz plik", "Przed uruchomieniem w przeglądarce musisz zapisać plik.")
             if not self.save_file_as():
                 return
-            
+        
         if editor.current_file:
             if editor.current_file.lower().endswith(('.html', '.htm')):
                 if editor.isModified() and not self.save_file():
@@ -912,40 +959,41 @@ class MkHTMLEditor(QMainWindow):
             if editor and editor.current_file:
                 is_duplicate = False
                 try:
-                    if os.path.samefile(file_path, editor.current_file):
-                        is_duplicate = True
+                    is_duplicate = os.path.samefile(file_path, editor.current_file)
                 except (FileNotFoundError, OSError):
-                    if os.path.normcase(os.path.abspath(file_path)) == os.path.normcase(os.path.abspath(editor.current_file)):
-                        is_duplicate = True
-                        
+                    is_duplicate = (os.path.normcase(os.path.abspath(file_path)) 
+                                    == os.path.normcase(os.path.abspath(editor.current_file)))
+                
                 if is_duplicate:
                     self.tabs.setCurrentIndex(i)
                     return
 
         try:
             content, encoding, eol_mode = read_text_file(file_path)
-            
-            curr_ed = self.current_editor()
-            should_close_empty = (
-                curr_ed is not None and 
-                curr_ed.current_file is None and 
-                not curr_ed.isModified() and 
-                curr_ed.text() == ""
-            )
-            empty_tab_idx = self.tabs.currentIndex() if should_close_empty else -1
-
-            self.add_new_tab(file_path=file_path, content=content, encoding=encoding, eol_mode=eol_mode)
-
-            if should_close_empty and empty_tab_idx != -1:
-                old_editor = self.tabs.widget(empty_tab_idx)
-                self.tabs.removeTab(empty_tab_idx)
-                if old_editor:
-                    old_editor.deleteLater()
-
-            self.working_dir = os.path.dirname(os.path.abspath(file_path))
-
         except Exception as e:
             QMessageBox.critical(self, "Błąd otwarcia pliku", f"Nie udało się otworzyć pliku:\n{e}")
+            return
+
+        curr_ed = self.current_editor()
+        
+        if (curr_ed is not None and curr_ed.current_file is None 
+                and not curr_ed.isModified() and curr_ed.text() == ""):
+            
+            curr_ed.file_encoding = encoding
+            if eol_mode is not None:
+                curr_ed.setEolMode(eol_mode)
+            
+            curr_ed.current_file = file_path
+            curr_ed.setText(content)
+            self.update_lexer_for_editor(curr_ed)
+            curr_ed.setModified(False)
+            
+            self.tabs.setTabText(self.tabs.currentIndex(), os.path.basename(file_path))
+            self.update_window_title()
+        else:
+            self.add_new_tab(file_path=file_path, content=content, encoding=encoding, eol_mode=eol_mode)
+
+        self.working_dir = os.path.dirname(os.path.abspath(file_path))
 
     def save_file(self):
         editor = self.current_editor()
@@ -993,14 +1041,14 @@ class MkHTMLEditor(QMainWindow):
                 self, "Zapisz plik jako", self.working_dir, "Pliki HTML (*.html *.htm);;Pliki CSS (*.css);;Wszystkie pliki (*)"
             )
             
-            if not file_path:
-                return False
+        if not file_path:
+            return False
 
-            if not os.path.splitext(file_path)[1]:
-                if 'HTML' in selected_filter:
-                    file_path += '.html'
-                elif 'CSS' in selected_filter:
-                    file_path += '.css'
+        if not os.path.splitext(file_path)[1]:
+            if 'HTML' in selected_filter:
+                file_path += '.html'
+            elif 'CSS' in selected_filter:
+                file_path += '.css'
 
         try:
             self._atomic_save(file_path, editor.text(), encoding=editor.file_encoding)
@@ -1012,7 +1060,7 @@ class MkHTMLEditor(QMainWindow):
             idx = self.tabs.indexOf(editor)
             if idx != -1:
                 self.tabs.setTabText(idx, os.path.basename(file_path))
-                
+            
             self.update_window_title()
             self.working_dir = os.path.dirname(os.path.abspath(file_path))
             return True

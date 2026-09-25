@@ -2,6 +2,36 @@
 
 Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pliku.
 
+# Changelog
+
+Wszystkie istotne zmiany w projekcie **mkHTML** są dokumentowane w tym pliku.
+
+---
+
+## [1.0.1.16 - 1.0.2.4]
+
+### Dodane
+- **Zamykanie znaczników w locie:** Wpisanie znaku `>` po otwarciu tagu HTML automatycznie generuje znacznik zamykający (z pominięciem tzw. *void tags* jak `<br>`, `<img>`, `<input>`).
+- **Rozwijanie tagów klawiszem TAB:** Wpisanie nazwy dowolnego standardowego znacznika HTML (np. `div`, `span`, `p`) i wciśnięcie klawisza `TAB` natychmiast rozwija go do pełnej formy (np. `<div></div>`) i precyzyjnie ustawia kursor.
+- **Wbudowane snippety:** Dodano szybkie skróty rozwijane klawiszem `TAB`:
+  - `html` – generuje pełny szkielet dokumentu HTML5 z podpiętym arkuszem stylów.
+  - `a` – generuje tag linku (`<a href=""></a>`).
+  - `img` – generuje tag obrazka (`<img src="" alt="">`).
+  - `lorem` – wstawia klasyczny tekst "Lorem ipsum...".
+- **Inteligentne łamanie linii (Enter):** Wciśnięcie klawisza `Enter` dokładnie pomiędzy otwierającym a zamykającym tagiem (np. `<div>|</div>`) automatycznie przenosi kursor do nowej linii z zachowaniem prawidłowych wcięć.
+- **Otaczanie zaznaczenia:** Zaznaczenie tekstu i wciśnięcie cudzysłowu (`"`, `'`) lub klamry (`{` w plikach CSS) automatycznie otacza wybrany tekst tymi znakami, zamiast go nadpisywać.
+
+### Zmienione
+- **Kontekstowe cudzysłowy i apostrofy:** Usprawniono logikę wpisywania cudzysłowów. Edytor "wychodzi" za zamykający cudzysłów bez jego dublowania i ignoruje wstawianie parzystych apostrofów wewnątrz wyrazów (zapobiega błędom przy słowach typu `don't`).
+- **Optymalizacja Lexerów:** Doprecyzowano działanie mechanizmów autouzupełniania w zależności od aktywnego lexera (HTML vs CSS), co zapobiega uruchamianiu specyficznych skrótów HTML wewnątrz arkuszy stylów.
+- Zaktualizowano globalne listy wspieranych znaczników (w tym *void tags*).
+
+### Naprawione
+- Rozwiązano problemy z nieoczekiwanym nadpisywaniem tekstu przy wciśnięciu `>` podczas aktywnego zaznaczenia.
+- Usunięto błędy związane z błędnym przesuwaniem kursora przy szybkim wprowadzaniu znaków specjalnych.
+
+---
+
 ## [1.0.1.15]
 
 ### Zmieniono
