@@ -1,20 +1,21 @@
 import sys
 import re
 import os
-import json
 import time
-import codecs
-import shutil
 import webbrowser
-import tempfile
 import logging
 from pathlib import Path
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QFileDialog, QMessageBox, QTabWidget
 )
 from PyQt6.QtGui import QFont, QFontDatabase, QAction, QKeySequence, QColor, QIcon
-from PyQt6.QtCore import Qt, QStandardPaths, QRect
+from PyQt6.QtCore import Qt, QRect
 from PyQt6.Qsci import QsciScintilla, QsciLexerHTML, QsciLexerCSS
+
+# --- IMPORT Z ZEWNĘTRZNYCH MODUŁÓW ---
+from config import THEMES, LOG_FILE, get_desktop_path, load_config, save_config
+from file_utils import read_text_file, _atomic_save
 
 # --- MAPOWANIE EOL ---
 EOL = {
@@ -23,270 +24,7 @@ EOL = {
     QsciScintilla.EolMode.EolMac: '\r'
 }
 
-def read_text_file(path):
-    """Odczytuje plik tekstowy, wykrywa pliki binarne, czyści BOM i ustala EOL."""
-    raw = Path(path).read_bytes()
-    if b'\x00' in raw[:8192]:
-        raise ValueError("Plik wygląda na plik binarny (wykryto bajty NUL).")
-    
-    order = ('utf-8-sig', 'cp1250') if raw.startswith(codecs.BOM_UTF8) else ('utf-8', 'cp1250')
-    for enc in order:
-        try:
-            text = raw.decode(enc)
-            break
-        except UnicodeDecodeError:
-            continue
-    else:
-        raise ValueError("Nie rozpoznano kodowania pliku (obsługiwane: UTF-8 / Windows-1250).")
-    
-    crlf = text.count('\r\n')
-    lf = text.count('\n') - crlf
-    
-    if crlf or lf:
-        mode = (QsciScintilla.EolMode.EolWindows if crlf >= lf else QsciScintilla.EolMode.EolUnix)
-        text = re.sub(r'\r\n|\r|\n', EOL[mode], text)
-    else:
-        mode = QsciScintilla.EolMode.EolWindows if os.name == 'nt' else QsciScintilla.EolMode.EolUnix
-    
-    return text, enc, mode
-
-# --- DEFINICJE MOTYWÓW ---
-THEMES = {
-    "jasny": {
-        "name": "Jasny (GitHub Light)",
-        "app_qss": "",
-        "bg": "#ffffff",
-        "fg": "#24292e",
-        "margin_bg": "#f6f8fa",
-        "margin_fg": "#6a737d",
-        "caret_line": "#f6f8fa",
-        "caret": "#24292e",
-        "selection_bg": "#0366d6",
-        "selection_fg": "#ffffff",
-        "html": {
-            "tag": "#005cc5",
-            "attr": "#6f42c1",
-            "string": "#22863a",
-            "entity": "#e36209",
-            "comment": "#6a737d",
-        },
-        "css": {
-            "tag": "#d73a49",
-            "class": "#6f42c1",
-            "id": "#005cc5",
-            "prop": "#008080",
-            "val": "#e36209",
-            "string": "#22863a",
-            "pseudo": "#9e1c23",
-            "comment": "#6a737d",
-        }
-    },
-    "ciemny": {
-        "name": "Ciemny (VS Code Dark)",
-        "app_qss": """
-            QMainWindow { background-color: #1e1e1e; color: #d4d4d4; }
-            QMenuBar { background-color: #252526; color: #cccccc; border-bottom: 1px solid #3c3c3c; }
-            QMenuBar::item:selected { background-color: #3c3c3c; color: #ffffff; }
-            QMenu { background-color: #252526; color: #cccccc; border: 1px solid #3c3c3c; }
-            QMenu::item:selected { background-color: #04395e; color: #ffffff; }
-            QTabWidget::pane { border: 1px solid #2d2d2d; background-color: #1e1e1e; }
-            QTabBar::tab { background-color: #2d2d2d; color: #969696; padding: 6px 12px; border: 1px solid #252526; }
-            QTabBar::tab:selected { background-color: #1e1e1e; color: #ffffff; border-top: 2px solid #007acc; }
-            QTabBar::tab:hover { background-color: #3c3c3c; color: #ffffff; }
-            QMessageBox { background-color: #252526; color: #cccccc; }
-        """,
-        "bg": "#1e1e1e",
-        "fg": "#d4d4d4",
-        "margin_bg": "#252526",
-        "margin_fg": "#858585",
-        "caret_line": "#282828",
-        "caret": "#aeafad",
-        "selection_bg": "#264f78",
-        "selection_fg": "#ffffff",
-        "html": {
-            "tag": "#569cd6",
-            "attr": "#9cdcfe",
-            "string": "#ce9178",
-            "entity": "#d7ba7d",
-            "comment": "#6a9955",
-        },
-        "css": {
-            "tag": "#d7ba7d",
-            "class": "#d7ba7d",
-            "id": "#d7ba7d",
-            "prop": "#9cdcfe",
-            "val": "#b5cea8",
-            "string": "#ce9178",
-            "pseudo": "#d7ba7d",
-            "comment": "#6a9955",
-        }
-    },
-    "rzutnik": {
-        "name": "Rzutnik (Wysoki Kontrast)",
-        "app_qss": """
-            QMainWindow { background-color: #ffffff; color: #000000; }
-            QMenuBar { background-color: #e0e0e0; color: #000000; font-weight: bold; border-bottom: 2px solid #000000; }
-            QMenuBar::item:selected { background-color: #000000; color: #ffffff; }
-            QMenu { background-color: #ffffff; color: #000000; border: 2px solid #000000; font-weight: bold; }
-            QMenu::item:selected { background-color: #0000cc; color: #ffffff; }
-            QTabWidget::pane { border: 2px solid #000000; background-color: #ffffff; }
-            QTabBar::tab { background-color: #e0e0e0; color: #000000; font-weight: bold; padding: 6px 14px; border: 1px solid #000000; }
-            QTabBar::tab:selected { background-color: #ffffff; color: #000000; border-top: 4px solid #0000cc; }
-            QTabBar::tab:hover { background-color: #cccccc; }
-            QMessageBox { background-color: #ffffff; color: #000000; }
-        """,
-        "bg": "#ffffff",
-        "fg": "#000000",
-        "margin_bg": "#e6e6e6",
-        "margin_fg": "#000000",
-        "caret_line": "#e8f0fe",
-        "caret": "#000000",
-        "selection_bg": "#0033cc",
-        "selection_fg": "#ffffff",
-        "html": {
-            "tag": "#cc0000",
-            "attr": "#0000cc",
-            "string": "#007700",
-            "entity": "#bb4400",
-            "comment": "#555555",
-        },
-        "css": {
-            "tag": "#cc0000",
-            "class": "#770088",
-            "id": "#0000cc",
-            "prop": "#006666",
-            "val": "#bb4400",
-            "string": "#007700",
-            "pseudo": "#aa0000",
-            "comment": "#555555",
-        }
-    },
-    "dracula": {
-        "name": "Dracula",
-        "app_qss": """
-            QMainWindow { background-color: #282a36; color: #f8f8f2; }
-            QMenuBar { background-color: #21222c; color: #f8f8f2; border-bottom: 1px solid #6272a4; }
-            QMenuBar::item:selected { background-color: #44475a; color: #ff79c6; }
-            QMenu { background-color: #21222c; color: #f8f8f2; border: 1px solid #6272a4; }
-            QMenu::item:selected { background-color: #bd93f9; color: #282a36; font-weight: bold; }
-            QTabWidget::pane { border: 1px solid #6272a4; background-color: #282a36; }
-            QTabBar::tab { background-color: #21222c; color: #6272a4; padding: 6px 12px; border: 1px solid #282a36; }
-            QTabBar::tab:selected { background-color: #282a36; color: #f8f8f2; border-top: 2px solid #ff79c6; }
-            QTabBar::tab:hover { background-color: #44475a; color: #f8f8f2; }
-            QMessageBox { background-color: #21222c; color: #f8f8f2; }
-        """,
-        "bg": "#282a36",
-        "fg": "#f8f8f2",
-        "margin_bg": "#21222c",
-        "margin_fg": "#6272a4",
-        "caret_line": "#44475a",
-        "caret": "#f8f8f0",
-        "selection_bg": "#44475a",
-        "selection_fg": "#ffffff",
-        "html": {
-            "tag": "#ff79c6",
-            "attr": "#50fa7b",
-            "string": "#f1fa8c",
-            "entity": "#bd93f9",
-            "comment": "#6272a4",
-        },
-        "css": {
-            "tag": "#ff79c6",
-            "class": "#50fa7b",
-            "id": "#ffb86c",
-            "prop": "#8be9fd",
-            "val": "#bd93f9",
-            "string": "#f1fa8c",
-            "pseudo": "#50fa7b",
-            "comment": "#6272a4",
-        }
-    },
-    "solarized_light": {
-        "name": "Solarized Light",
-        "app_qss": """
-            QMainWindow { background-color: #fdf6e3; color: #657b83; }
-            QMenuBar { background-color: #eee8d5; color: #586e75; border-bottom: 1px solid #d33682; }
-            QMenuBar::item:selected { background-color: #d33682; color: #ffffff; }
-            QMenu { background-color: #eee8d5; color: #586e75; border: 1px solid #d33682; }
-            QMenu::item:selected { background-color: #268bd2; color: #ffffff; }
-            QTabWidget::pane { border: 1px solid #eee8d5; background-color: #fdf6e3; }
-            QTabBar::tab { background-color: #eee8d5; color: #93a1a1; padding: 6px 12px; border: 1px solid #fdf6e3; }
-            QTabBar::tab:selected { background-color: #fdf6e3; color: #657b83; border-top: 2px solid #268bd2; }
-            QTabBar::tab:hover { background-color: #e0d7c3; color: #586e75; }
-            QMessageBox { background-color: #eee8d5; color: #657b83; }
-        """,
-        "bg": "#fdf6e3",
-        "fg": "#657b83",
-        "margin_bg": "#eee8d5",
-        "margin_fg": "#93a1a1",
-        "caret_line": "#eee8d5",
-        "caret": "#657b83",
-        "selection_bg": "#eee8d5",
-        "selection_fg": "#073642",
-        "html": {
-            "tag": "#268bd2",
-            "attr": "#b58900",
-            "string": "#2aa198",
-            "entity": "#cb4b16",
-            "comment": "#93a1a1",
-        },
-        "css": {
-            "tag": "#268bd2",
-            "class": "#b58900",
-            "id": "#d33682",
-            "prop": "#859900",
-            "val": "#6c71c4",
-            "string": "#2aa198",
-            "pseudo": "#cb4b16",
-            "comment": "#93a1a1",
-        }
-    },
-    "gruvbox_dark": {
-        "name": "Gruvbox Dark",
-        "app_qss": """
-            QMainWindow { background-color: #282828; color: #ebdbb2; }
-            QMenuBar { background-color: #1d2021; color: #ebdbb2; border-bottom: 1px solid #504945; }
-            QMenuBar::item:selected { background-color: #3c3836; color: #fe8019; }
-            QMenu { background-color: #1d2021; color: #ebdbb2; border: 1px solid #504945; }
-            QMenu::item:selected { background-color: #d65d0e; color: #ffffff; }
-            QTabWidget::pane { border: 1px solid #504945; background-color: #282828; }
-            QTabBar::tab { background-color: #1d2021; color: #a89984; padding: 6px 12px; border: 1px solid #282828; }
-            QTabBar::tab:selected { background-color: #282828; color: #ebdbb2; border-top: 2px solid #fe8019; }
-            QTabBar::tab:hover { background-color: #3c3836; color: #ebdbb2; }
-            QMessageBox { background-color: #1d2021; color: #ebdbb2; }
-        """,
-        "bg": "#282828",
-        "fg": "#ebdbb2",
-        "margin_bg": "#1d2021",
-        "margin_fg": "#7c6f64",
-        "caret_line": "#3c3836",
-        "caret": "#ebdbb2",
-        "selection_bg": "#504945",
-        "selection_fg": "#fbf1c7",
-        "html": {
-            "tag": "#fb4934",
-            "attr": "#fabd2f",
-            "string": "#b8bb26",
-            "entity": "#d3869b",
-            "comment": "#928374",
-        },
-        "css": {
-            "tag": "#fb4934",
-            "class": "#fabd2f",
-            "id": "#fe8019",
-            "prop": "#8ec07c",
-            "val": "#d3869b",
-            "string": "#b8bb26",
-            "pseudo": "#83a598",
-            "comment": "#928374",
-        }
-    }
-}
-
-# --- KONFIGURACJA ŚCIEŻEK, USTAWIEŃ I LOGOWANIA ---
-CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".mkhtml_config.json")
-LOG_FILE = os.path.join(os.path.expanduser("~"), ".mkhtml.log")
-
+# --- LOGOWANIE I OBSŁUGA BŁĘDÓW ---
 try:
     logging.basicConfig(
         filename=LOG_FILE, 
@@ -304,56 +42,6 @@ def _excepthook(exc_type, exc, tb):
             "mkHTML - Błąd", 
             f"Wystąpił nieoczekiwany błąd:\n{exc}\n\nSzczegóły: {LOG_FILE}"
         )
-
-def get_desktop_path():
-    return QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DesktopLocation)
-
-def load_config():
-    desktop_path = get_desktop_path()
-    default_config = {
-        "working_dir": desktop_path,
-        "x": 100,
-        "y": 100,
-        "width": 950,
-        "height": 680,
-        "theme": "jasny"
-    }
-    
-    if not os.path.exists(CONFIG_FILE):
-        save_config(default_config)
-        return default_config
-
-    try:
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-        if not isinstance(config, dict):
-            return default_config
-        
-        saved_dir = config.get("working_dir", desktop_path)
-        if not os.path.exists(saved_dir):
-            config["working_dir"] = desktop_path
-        
-        for key in ["x", "y", "width", "height"]:
-            if key not in config or not isinstance(config[key], int):
-                config[key] = default_config[key]
-        
-        if config.get("theme") not in THEMES:
-            config["theme"] = "jasny"
-        
-        config["x"] = max(0, config["x"])
-        config["y"] = max(0, config["y"])
-        
-        return config
-    except Exception:
-        return default_config
-
-def save_config(config_data):
-    try:
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(config_data, f, indent=4)
-    except Exception as e:
-        logging.error(f"Błąd zapisu konfiguracji: {e}")
-
 
 class MyCodeEditor(QsciScintilla):
     """Autorska klasa edytora z obsługą autouzupełniania tagów, klamer, wcięć i snippetów."""
@@ -493,7 +181,6 @@ class MyCodeEditor(QsciScintilla):
 
         # 2. OBSŁUGA ZAMYKANIA KLAMER DLA CSS ({)
         if text == '{' and isinstance(self.lexer(), QsciLexerCSS):
-            # Otaczanie zaznaczonego tekstu klamrami
             if self.hasSelectedText():
                 line_from, index_from, line_to, index_to = self.getSelection()
                 sel_text = self.selectedText()
@@ -512,7 +199,6 @@ class MyCodeEditor(QsciScintilla):
 
         # 3. OBSŁUGA CUDZYSŁOWÓW I APOSTROFÓW (" oraz ')
         if text in ['"', "'"]:
-            # Otaczanie zaznaczonego tekstu znakami
             if self.hasSelectedText():
                 line_from, index_from, line_to, index_to = self.getSelection()
                 sel_text = self.selectedText()
@@ -521,18 +207,15 @@ class MyCodeEditor(QsciScintilla):
                     self.setSelection(line_from, index_from, line_to, index_to + 2)
                 return
 
-            # Wychodzenie za znak, jeśli wpisujemy to samo przed zamykającym znakiem
             if col < len(full_line_text) and full_line_text[col] == text:
                 self.setCursorPosition(line, col + 1)
                 return
             
-            # Zabezpieczenie przed podwójnym apostrofem w kontrakcjach (np. don't)
             char_before = full_line_text[col-1] if col > 0 else ''
             if char_before.isalnum():
                 super().keyPressEvent(event)
                 return
             
-            # Standardowe autozamykanie
             super().keyPressEvent(event)
             self.insert(text)
             self.setCursorPosition(line, col + 1)
@@ -540,7 +223,6 @@ class MyCodeEditor(QsciScintilla):
 
         # 4. OBSŁUGA AUTOMATYCZNEGO ZAMYKANIA ZNACZNIKÓW HTML (>)
         if text == '>':
-            # Jeśli jest zaznaczony tekst, po prostu go nadpisujemy, pomijając autozamykanie tagów
             if self.hasSelectedText():
                 super().keyPressEvent(event)
                 return
@@ -550,7 +232,6 @@ class MyCodeEditor(QsciScintilla):
             
             super().keyPressEvent(event)
             
-            # Weryfikacja lexera (tylko w HTML)
             if isinstance(self.lexer(), QsciLexerHTML):
                 match = self.rx_close_tag.search(chunk_before_cursor)
                 if match:
@@ -589,7 +270,7 @@ class MkHTMLEditor(QMainWindow):
         
         self.font = QFont(chosen_font, 12)
         
-        self.setWindowTitle("mkHTML v1.0.2.4")
+        self.setWindowTitle("mkHTML v1.0.3.1")
         
         if getattr(sys, 'frozen', False):
             if hasattr(sys, '_MEIPASS'):
@@ -633,42 +314,6 @@ class MkHTMLEditor(QMainWindow):
         
         self.create_menu()
         self.add_new_tab()
-
-    def _atomic_save(self, file_path, content, encoding='utf-8'):
-        """Bezpieczny, zablokowany przed kolizjami zapis pliku z zachowaniem uprawnień i fsync."""
-        target = os.path.realpath(file_path)
-        fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(target),
-                                        prefix=".mkhtml_save_", suffix=".tmp")
-        try:
-            try:
-                f = os.fdopen(fd, 'w', encoding=encoding, newline='')
-            except Exception:
-                os.close(fd)
-                raise
-
-            with f:
-                f.write(content)
-                f.flush()
-                os.fsync(f.fileno())
-
-            if os.path.exists(target):
-                shutil.copymode(target, tmp_path)
-
-            for attempt in range(5):
-                try:
-                    os.replace(tmp_path, target)
-                    return
-                except PermissionError:
-                    if attempt == 4:
-                        raise
-                    time.sleep(0.1 * (attempt + 1))
-
-        except Exception:
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
-            raise
 
     def save_app_config(self):
         geom = self.geometry()
@@ -729,9 +374,9 @@ class MkHTMLEditor(QMainWindow):
         if editor:
             file_str = editor.current_file if editor.current_file else "Nowy plik"
             mod_str = " *" if editor.isModified() else ""
-            self.setWindowTitle(f"mkHTML v1.0.2.4 - {file_str}{mod_str}")
+            self.setWindowTitle(f"mkHTML v1.0.3.1 - {file_str}{mod_str}")
         else:
-            self.setWindowTitle("mkHTML v1.0.2.4")
+            self.setWindowTitle("mkHTML v1.0.3.1")
 
     def update_lexer_for_editor(self, editor):
         theme_data = THEMES.get(self.current_theme, THEMES["jasny"])
@@ -1002,7 +647,7 @@ class MkHTMLEditor(QMainWindow):
 
         if editor.current_file:
             try:
-                self._atomic_save(editor.current_file, editor.text(), encoding=editor.file_encoding)
+                _atomic_save(editor.current_file, editor.text(), encoding=editor.file_encoding)
                 editor.setModified(False)
                 idx = self.tabs.indexOf(editor)
                 if idx != -1:
@@ -1051,7 +696,7 @@ class MkHTMLEditor(QMainWindow):
                 file_path += '.css'
 
         try:
-            self._atomic_save(file_path, editor.text(), encoding=editor.file_encoding)
+            _atomic_save(file_path, editor.text(), encoding=editor.file_encoding)
             
             editor.current_file = file_path
             editor.setModified(False)

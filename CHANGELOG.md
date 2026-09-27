@@ -2,9 +2,22 @@
 
 Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pliku.
 
-# Changelog
+---
 
-Wszystkie istotne zmiany w projekcie **mkHTML** są dokumentowane w tym pliku.
+## [1.0.2.5 - 1.0.3.1-dev] - 2026-09-27
+
+### 🏗️ Architektura i refaktoryzacja (Major Refactoring)
+* **Rozbicie monolitu:** Zakończono proces podziału głównego, rozbudowanego pliku `mkHTML.py` na mniejsze, niezależne moduły o pojedynczej odpowiedzialności. Ułatwi to dalszy rozwój, testowanie oraz utrzymanie kodu.
+* **Nowy moduł `file_utils.py` (Warstwa I/O):**
+  * Całkowite odseparowanie operacji dyskowych od interfejsu graficznego (PyQt6).
+  * Wdrożenie w pełni atomowego zapisu plików (`_atomic_save`) z wykorzystaniem plików tymczasowych, fizycznego zrzutu z pamięci podręcznej na dysk (`os.fsync`) oraz mechanizmu ponowień (ochrona przed zjawiskiem zablokowanych plików w systemie Windows).
+  * Usprawniony system odczytu (`read_text_file`) z wczesną detekcją plików binarnych (bajt NUL), czyszczeniem nagłówka BOM i automatyczną normalizacją znaków końca linii (CRLF/LF).
+* **Nowy moduł `config.py` (oraz oddzielenie motywów):**
+  * Logika zarządzania plikiem konfiguracyjnym JSON, ładowanie struktury motywów kolorystycznych oraz wykrywanie ścieżek systemowych (np. Pulpit) zostały wyodrębnione z rdzenia edytora.
+* **Odchudzenie `mkHTML.py`:** Główny plik pełni teraz wyłącznie rolę integratora systemu i głównego kontrolera GUI (okna, menu, zarządzanie zdarzeniami edytora Scintilla). 
+
+### 🔧 Poprawki i optymalizacje
+* Usunięto zbędne biblioteki i importy z pliku głównego (m.in. `codecs`, `shutil`, `tempfile`), przenosząc je do dedykowanych modułów.
 
 ---
 
