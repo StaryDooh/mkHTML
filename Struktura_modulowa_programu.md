@@ -101,8 +101,8 @@ Moduł przechowujący definicje wyglądu edytora i całej aplikacji.
         "pseudo": "#ff8000",
         "comment": "#008000"
     }
-}```
-
+}
+```
 ### 4. `file_utils.py` (Operacje wejścia/wyjścia)
 "Robotnik" dyskowy, całkowicie uniezależniony od interfejsu graficznego.
 * **Zadania:**
