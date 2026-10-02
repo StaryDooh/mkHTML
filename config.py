@@ -1,16 +1,17 @@
+# config.py
 import os
 import json
 import logging
-from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import QStandardPaths
 
-# Uwaga: Ten moduł zakłada, że słownik THEMES zostanie przeniesiony 
-# do pliku themes.py zgodnie z zaproponowaną architekturą.
 from themes import THEMES
 
-# --- KONFIGURACJA ŚCIEŻEK, USTAWIEŃ I LOGOWANIA ---
-CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".mkhtml_config.json")
+# --- STAŁE APLIKACJI ---
+APP_VERSION = "1.0.3.4"
 LOG_FILE = os.path.join(os.path.expanduser("~"), ".mkhtml.log")
+CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".mkhtml_config.json")
+
+# ... (reszta dotychczasowego kodu config.py) ...
 
 try:
     logging.basicConfig(

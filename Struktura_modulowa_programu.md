@@ -1,164 +1,121 @@
 # Dokumentacja struktury modułowej aplikacji mkHTML
 
-Niniejszy dokument opisuje docelowy podział monolitycznego kodu aplikacji **mkHTML** na odrębne, wyspecjalizowane moduły. Architektura ta opiera się na wzorcu *Separation of Concerns* (rozdzielenie odpowiedzialności), co ma na celu ułatwienie testowania, czytelność kodu oraz bezpieczną rozbudowę aplikacji o nowe funkcje.
+Niniejszy dokument opisuje docelowy oraz zrealizowany podział monolitycznego kodu aplikacji **mkHTML** na odrębne, wyspecjalizowane moduły[cite: 2]. Architektura ta opiera się na wzorcu *Separation of Concerns* (rozdzielenie odpowiedzialności), co ułatwia testowanie, zwiększa czytelność kodu oraz umożliwia bezpieczną rozbudowę aplikacji o nowe funkcje[cite: 2].
 
 ## Struktura plików i odpowiedzialność modułów
 
 ### 1. `mkHTML.py` (Punkt wejścia aplikacji)
-Główny skrypt uruchomieniowy. Jest to najkrótszy plik w projekcie, pozbawiony logiki biznesowej.
+Główny skrypt uruchomieniowy. Jest to najkrótszy plik w projekcie, pozbawiony bezpośredniej logiki biznesowej i interfejsu[cite: 1, 2].
 * **Zadania:**
-  * Inicjalizacja obiektu `QApplication`.
-  * Konfiguracja globalnego przechwytywania wyjątków (`sys.excepthook`).
-  * Utworzenie i wyświetlenie głównego okna programu.
-  * Uruchomienie głównej pętli zdarzeń (`app.exec()`).
+  * Inicjalizacja obiektu `QApplication`[cite: 1, 2].
+  * Konfiguracja globalnego przechwytywania wyjątków (`sys.excepthook`)[cite: 1, 2].
+  * Utworzenie i wyświetlenie głównego okna programu (`MkHTMLEditor`)[cite: 1, 2].
+  * Uruchomienie głównej pętli zdarzeń (`app.exec()`)[cite: 1, 2].
 
 * **Zrobiono:**
-
-  Główny moduł aplikacji `mkHTML.py` został odchudzony o logikę obsługi konfiguracji, kolorystyki oraz operacji wejścia/wyjścia (I/O). Pełni funkcję integratora systemu, spijającego wyodrębnione moduły (`config`, `file_utils`, `themes`) z interfejsem użytkownika[cite: 1].
-
-  * **Logika Edytora (`MyCodeEditor`):**
-    * Dziedziczenie po `QsciScintilla` i dostosowanie ustawień zawijania wierszy oraz marginesów.
-    * Zaawansowana obsługa zdarzeń klawiatury (`keyPressEvent`):
-      * **Inteligentny Enter:** automatyczne rozbijanie i wcinanie tekstu między tagami (np. `<p>|</p>` + Enter).
-      * **Autouzupełnianie z klawiszem Tab:** dynamiczne rozwijanie tagów HTML, wstawianie struktur dla `html`, `a`, `img` oraz tekstu `lorem`.
-      * **Automatyczne parowanie znaków:** domykanie klamer `{` (z automatycznym wcięciem w CSS), cudzysłowów `"` oraz apostrofów `'`.
-      * **Zamykanie znaczników HTML:** automatyczne generowanie tagów zamykających (np. `</tag>`) po wpisaniu znaku `>` z pomijaniem tagów samozamykających (`void_tags`).
-
-  * **Okno Główne i Interfejs (`MkHTMLEditor`):**
-    * Obsługa wielu dokumentów w zakładkach (`QTabWidget`) z sygnalizacją niezapisanych zmian (`*`).
-    * Dynamiczne nakładanie kolorystyki i lekserów (`QsciLexerHTML`, `QsciLexerCSS`) na podstawie słowników z modułu `themes.py`.
-    * Zarządzanie cyklem życia pliku – wywoływanie bezpiecznego odczytu i zapisu (`read_text_file`, `_atomic_save`) z modułu `file_utils.py`.
-    * Tworzenie paska menu (Plik, Edycja, Motyw, Podgląd F5, Odwiedź...) oraz integracja z przeglądarką internetową.
-
-  * **Inicjalizacja i Bezpieczeństwo:**
-    * Wczytywanie ustawień okna i ostatniego motywu przy użyciu `load_config()` i `save_config()`.
-    * Przechwytywanie nieobsłużonych błędów poprzez `sys.excepthook = _excepthook` z prezentacją problemu w oknie dialogowym `QMessageBox`.
+  Główny moduł aplikacji `mkHTML.py` został całkowicie odchudzony i sprowadzony do pełnienia funkcji chudego punktu wejścia (*lean entry point*)[cite: 1].
+  * **Inicjalizacja:** Tworzenie instancji `QApplication` i uruchomienie pętli zdarzeń[cite: 1, 2].
+  * **Przechwytywanie błędów:** Rejestracja globalnego `sys.excepthook` rejestrującego awarie w pliku logów i wyświetlającego `QMessageBox`[cite: 1, 3].
+  * **Odchudzenie:** Cała logika okna, edytora, menu oraz operacji dyskowych została przeniesiona do odpowiednich modułów[cite: 1, 3, 5, 6, 9].
 
 ### 2. `config.py` (Zarządzanie konfiguracją i logowaniem)
-Moduł odpowiedzialny za środowisko i ustawienia aplikacji.
+Moduł odpowiedzialny za środowisko, stałe aplikacji i zapis/odczyt ustawień użytkownika[cite: 2, 3].
 * **Zadania:**
-  * Definicja stałych ścieżek (np. plik konfiguracyjny `.mkhtml_config.json`, plik logów `.mkhtml.log`).
-  * Inicjalizacja systemu logowania (wraz z zabezpieczeniem typu *fallback* w przypadku błędu zapisu na dysku).
-  * Funkcje `load_config()` i `save_config()` do odczytu i zapisu stanu okna, wybranego motywu oraz ostatniego katalogu roboczego.
+  * Definicja stałych ścieżek (plik konfiguracyjny `.mkhtml_config.json`, plik logów `.mkhtml.log`)[cite: 2, 3].
+  * Przechowywanie stałej wersji aplikacji `APP_VERSION`[cite: 3].
+  * Inicjalizacja systemu logowania[cite: 2, 3].
+  * Funkcje `load_config()` i `save_config()` do odczytu i zapisu stanu okna, wybranego motywu oraz ostatniego katalogu roboczego[cite: 2, 3].
 
 * **Zrobiono:**
-
-  Moduł `config.py` wyodrębniony z pliku `mkHTML_4.py` koncentruje się na konfiguracji środowiska, logowaniu oraz zarządzaniu plikami ustawień. Kod zawiera również niezbędne importy, które pozwolą mu działać niezależnie.
-
-  * **Ścieżki i logi:** Moduł inicjalizuje system logowania i definiuje ścieżki do plików `.mkhtml_config.json` oraz `.mkhtml.log` w katalogu domowym użytkownika.
-
-  * **Obsługa błędów:** Zawiera funkcję `_excepthook`, która przechwytuje nieobsłużone wyjątki i wyświetla je za pomocą okna `QMessageBox` z modułu `PyQt6.QtWidgets`.
-  
-  * **Odczyt i zapis ustawień:** Posiada funkcje `load_config` i `save_config`, które parsują plik JSON i ustalają m.in. początkową pozycję okna, domyślny motyw oraz ścieżkę do pulpitu przy użyciu `QStandardPaths`.   
+  Moduł w pełni wyodrębniony jako centralne źródło prawdy dla konfiguracji[cite: 2, 3].
+  * **Stałe aplikacji:** Zdefiniowano `APP_VERSION = "1.0.3.2"`, ścieżkę do pliku logów `LOG_FILE` oraz pliku konfiguracyjnego `CONFIG_FILE`[cite: 3].
+  * **Obsługa ścieżek:** Funkcja `get_desktop_path()` do bezpiecznego pobierania domyślnego katalogu roboczego[cite: 3].
+  * **Odczyt i zapis JSON:** Funkcje `load_config()` oraz `save_config()` do obsługi pozycji okna, wymiarów oraz wybranego motywu[cite: 3].
 
 ### 3. `themes.py` (Baza motywów wizualnych)
-Moduł przechowujący definicje wyglądu edytora i całej aplikacji.
+Moduł przechowujący definicje wyglądu edytora i całej aplikacji[cite: 2, 8].
 * **Zadania:**
-  * Przechowywanie słownika `THEMES` z paletami kolorów dla trybów: Jasny, Ciemny, Rzutnik, Dracula, itp.
-  * Zawiera definicje stylów globalnych QSS dla komponentów (pasek menu, zakładki, okna dialogowe).
-  * Opcjonalnie: funkcje pomocnicze do mapowania kolorów HEX na obiekty `QColor`.
+  * Przechowywanie słownika `THEMES` z paletami kolorów dla trybów (Jasny, Ciemny itp.)[cite: 2, 8].
+  * Zawiera definicje stylów globalnych QSS dla komponentów[cite: 2, 8].
+  * Mapowanie kolorów HTML/CSS dla lexerów Scintilla[cite: 2, 8].
 
 * **Zrobiono:**
+  Moduł pełni rolę centralnego magazynu konfiguracji wizualnej edytora. Przechowuje słownik `THEMES`, który całkowicie oddziela warstwę prezentacji od głównej logiki[cite: 2, 8].
+  * **Globalny styl QSS:** Definicje wyglądów interfejsu PyQt6 (`app_qss`)[cite: 2, 8].
+  * **Stylizacja obszaru edytora:** Ustawienia tła, tekstu, kursora, linii kursora oraz marginesów z numerami wierszy[cite: 2, 8].
+  * **Kolorowanie składni (Lexery):** Słowniki barw dla elementów HTML (tagi, atrybuty, napisy, komentarze) oraz CSS (selektory, właściwości, wartości)[cite: 2, 8].
 
-  Moduł pełni rolę centralnego magazynu konfiguracji wizualnej edytora. Przechowuje słownik `THEMES`, który całkowicie oddziela warstwę prezentacji i wyglądu od głównej logiki aplikacji (`mkHTML.py`). Dzięki takiej architekturze dodawanie nowych schematów kolorystycznych nie wymaga ingerencji w główny kod edytora.
-
-  Każdy motyw zdefiniowany w słowniku `THEMES` (np. `"jasny"`, `"ciemny"`) zarządza trzema głównymi obszarami interfejsu:
-
-  * **Globalny styl interfejsu (QSS):** Definiuje wygląd głównych komponentów okna (np. tło aplikacji, styl zakładek, przyciski) poprzez klucz `app_qss` obsługiwany przez framework PyQt6.
-  * **Kolorystyka obszaru roboczego (QsciScintilla):** Określa bazowe właściwości edytora tekstu, w tym: tło (`bg`), kolor czcionki (`fg`), kursor i jego linia (`caret`, `caret_line`), wygląd zaznaczonego tekstu (`selection_bg`, `selection_fg`) oraz margines z numeracją linii (`margin_bg`, `margin_fg`).
-  * **Podświetlanie składni (Lexery):** Zawiera dedykowane, zagnieżdżone słowniki mapujące kody szesnastkowe (HEX) na poszczególne elementy struktury kodu:
-    * **`html`** – kolorowanie tagów, atrybutów, ciągów znaków (wartości), encji oraz komentarzy.
-    * **`css`** – rozróżnianie i kolorowanie selektorów (tagi, klasy, ID), właściwości, wartości, pseudoklas oraz komentarzy.
-
-#### Przykład struktury pojedynczego motywu:
-
-```python
-"nazwa_kodowa": {
-    "name": "Wyświetlana nazwa w menu",
-    "app_qss": "QMainWindow { background-color: #f0f0f0; }",
-    "bg": "#ffffff",
-    "fg": "#000000",
-    "caret": "#000000",
-    "caret_line": "#e8e8e8",
-    "selection_bg": "#a6d2ff",
-    "selection_fg": "#000000",
-    "margin_bg": "#f0f0f0",
-    "margin_fg": "#888888",
-    "html": {
-        "tag": "#0000ff",
-        "attr": "#ff0000",
-        "string": "#a31515",
-        "entity": "#ff0000",
-        "comment": "#008000"
-    },
-    "css": {
-        "tag": "#0000ff",
-        "class": "#ff0000",
-        "id": "#ff0000",
-        "prop": "#ff0000",
-        "val": "#0000ff",
-        "string": "#a31515",
-        "pseudo": "#ff8000",
-        "comment": "#008000"
-    }
-}
-```
 ### 4. `file_utils.py` (Operacje wejścia/wyjścia)
-"Robotnik" dyskowy, całkowicie uniezależniony od interfejsu graficznego.
+"Robotnik dyskowy" (warstwa I/O), całkowicie uniezależniony od interfejsu graficznego[cite: 2, 5].
 * **Zadania:**
-  * Funkcja `read_text_file(path)`: odczyt plików, wykrywanie kodowania, weryfikacja bajtów NUL (pliki binarne), normalizacja znaków końca linii (EOL).
-  * Funkcja `_atomic_save(...)`: bezpieczny zapis do pliku z wykorzystaniem plików tymczasowych i `os.fsync`, chroniący przed utratą danych w razie awarii.
+  * Funkcja `read_text_file(path)`: odczyt plików, wykrywanie kodowania, weryfikacja bajtów NUL (pliki binarne), normalizacja znaków końca linii (EOL)[cite: 2, 5].
+  * Funkcja `_atomic_save(...)`: bezpieczny zapis do pliku z wykorzystaniem plików tymczasowych i `os.fsync`, chroniący przed utratą danych[cite: 2, 5].
 
 * **Zrobiono:**
-
-  Moduł `file_utils.py` został w pełni wyodrębniony jako niezależny "robotnik dyskowy" (warstwa I/O)[cite: 6]. Został całkowicie odseparowany od interfejsu graficznego PyQt6, dzięki czemu nie posiada żadnych zależności od klas GUI i może być łatwo testowany osobno[cite: 6].
-
-  * **Odczyt plików (`read_text_file`):**
-    * Weryfikacja obecności bajtów NUL w pierwszych 8 KB pliku w celu natychmiastowego wykluczenia plików binarnych[cite: 5, 6].
-    * Automatyczne czyszczenie nagłówka UTF-8 BOM (`utf-8-sig`) oraz obsługa zestawów znaków `utf-8` i `cp1250`[cite: 5, 6].
-    * Wykrywanie oraz automatyczna normalizacja znaków końca linii (EOL: Windows CRLF / Unix LF)[cite: 5, 6].
-
-  * **Bezpieczny zapis (`_atomic_save`):**
-    * Zapis atomowy z wykorzystaniem plików tymczasowych (`tempfile.mkstemp`), chroniący plik przed uszkodzeniem lub wyczyszczeniem w razie awarii zasilania bądź błędu aplikacji podczas zapisu[cite: 5, 6].
-    * Zapewnienie fizycznego zrzutu danych z pamięci podręcznej na dysk za pomocą `f.flush()` oraz `os.fsync()`[cite: 5, 6].
-    * Zachowanie uprawnień i trybu dostępu oryginalnego pliku (`shutil.copymode`)[cite: 5, 6].
-    * Pętla powtórzeń z opóźnieniem przy podmienianiu pliku (`os.replace`) chroniąca przed kolizjami blokad plików w systemie Windows (`PermissionError`)[cite: 5, 6].
+  Moduł wyodrębniony jako niezależna warstwa I/O bez zależności od interfejsu użytkownika PyQt6[cite: 2, 5].
+  * **Odczyt plików (`read_text_file`):** Wykrywanie plików binarnych (bajt NUL w pierwszych 8 KB), obsługa kodowania UTF-8 (z czyszczeniem BOM) oraz CP1250, detekcja i normalizacja znaków EOL (CRLF / LF)[cite: 2, 5].
+  * **Bezpieczny zapis (`_atomic_save`):** Zapis atomowy przez pliki tymczasowe (`tempfile.mkstemp`), `os.fsync` wymuszający zrzut na dysk, zachowanie uprawnień (`shutil.copymode`) oraz pętla powtórzeń chroniąca przed blokadami plików w Windows (`PermissionError`)[cite: 2, 5].
 
 ### 5. `snippets.py` (Baza autouzupełniania)
-Moduł z danymi statycznymi, wykorzystywanymi przez edytor do wspomagania pisania kodu.
+Moduł z danymi statycznymi wspierającymi pisanie kodu[cite: 2, 7].
 * **Zadania:**
-  * Słownik `snippets` zawierający szablony kodu (np. szkielet HTML, Lorem Ipsum).
-  * Zbiór `void_tags` (tagi samozamykające, np. `<br>`, `<img>`).
-  * (Przyszłość) Logika wczytywania własnych snippetów zdefiniowanych przez użytkownika.
+  * Słownik `SNIPPETS` zawierający szablony kodu (np. szkielet HTML, Lorem Ipsum)[cite: 2, 7].
+  * Zbiór `VOID_TAGS` (tagi samozamykające, np. `<br>`, `<img>`)[cite: 2, 7].
+  * Zbiór `KNOWN_TAGS` do weryfikacji i autouzupełniania znaczników HTML[cite: 2, 7].
+
+* **Zrobiono:**
+  Moduł w pełni wyodrębniony jako pasywna baza danych dla edytora kodu[cite: 2, 7].
+  * **Zbiory znaczników:** `VOID_TAGS` (tagi bez znaku zamykającego) oraz `KNOWN_TAGS` (lista dozwolonych znaczników HTML)[cite: 2, 7].
+  * **Szablony kodu:** `SNIPPETS` oraz `LOREM_TEXT` przechowujące gotowe bloki tekstu wraz z offsetem pozycji kursora po wstawieniu (np. skróty `html`, `a`, `img`, `lorem`)[cite: 2, 7].
 
 ### 6. `editor.py` (Logika edytora tekstu)
-Serce aplikacji w kontekście edycji kodu.
+Komponent wykonawczy dla obszaru edycji tekstu[cite: 2, 4].
 * **Zadania:**
-  * Klasa `MyCodeEditor` dziedzicząca po `QsciScintilla`.
-  * Konfiguracja podstawowa Scintilli (zawijanie wierszy, marginesy).
-  * Obsługa zdarzeń klawiatury (`keyPressEvent`): inteligentne zamykanie tagów, domykanie nawiasów `{`, cudzysłowów `"` i `'` oraz rozwijanie słów kluczowych klawiszem Tab.
-  * Korzysta bezpośrednio z modułu `snippets.py`.
+  * Klasa `MyCodeEditor` dziedzicząca po `QsciScintilla`[cite: 2, 4].
+  * Konfiguracja zawijania wierszy i marginesów[cite: 2, 4].
+  * Obsługa zdarzeń klawiatury (`keyPressEvent`): inteligentne zamykanie tagów, domykanie nawiasów `{`, cudzysłowów `"` i `'` oraz rozwijanie słów kluczowych klawiszem Tab[cite: 2, 4].
+
+* **Zrobiono:**
+  Wyodrębniono klasę edytora tekstu wraz ze słownikiem mapowania EOL[cite: 2, 4].
+  * **Klasa `MyCodeEditor`:** Dziedziczenie po `QsciScintilla`, automatyczna konfiguracja końców linii zależna od systemu operacyjnego (Windows CRLF / Unix LF)[cite: 2, 4].
+  * **Zaawansowana obsługa `keyPressEvent`:**
+    * **Inteligentny Enter:** automatyczne rozbijanie i wcinanie tekstu między tagami (np. `<p>|</p>`)[cite: 2, 4].
+    * **Rozwijanie skrótów klawiszem Tab:** pobieranie szablonów ze `snippets.py`, wstawianie z zachowaniem bieżącego wcięcia i pozycjonowaniem kursora[cite: 2, 4, 7].
+    * **Auto-zamykanie tagów HTML:** tworzenie tagu zamykającego po wpisaniu `>` (z pominięciem `VOID_TAGS`)[cite: 2, 4, 7].
+    * **Parowanie znaków:** automatyczne parowanie `{` w CSS, cudzysłowów `"` oraz apostrofów `'`[cite: 2, 4].
 
 ### 7. `ui_menu.py` (Budowa paska menu)
-Moduł pomocniczy do odciążenia głównej klasy okna, odpowiedzialny wyłącznie za kreację UI.
+Moduł odpowiedzialny wyłącznie za kreację paska menu i akcji użytkownika[cite: 2, 9].
 * **Zadania:**
-  * Funkcje lub klasa do budowania obiektu `QMenuBar`.
-  * Podpinanie akcji (Nowy, Otwórz, Zapisz, Cofnij, Podgląd F5) oraz skrótów klawiaturowych pod odpowiednie metody głównego okna.
-  * Dynamiczne budowanie menu "Motyw" na podstawie kluczy z modułu `themes.py`.
+  * Budowa struktury `QMenuBar` głównego okna[cite: 2, 9].
+  * Tworzenie menu: Plik, Edycja, Motyw, Podgląd (F5) oraz Odwiedź[cite: 2, 9].
+  * Podpinanie akcji pod odpowiednie metody klasy `MkHTMLEditor`[cite: 2, 9].
+
+* **Zrobiono:**
+  Pasek menu został wydzielony do osobnego pliku, co znacząco skróciło kod okna głównego[cite: 2, 9].
+  * **Funkcja `create_menu(window)`:** Buduje kompletne menu aplikacji i podczepia akcje do przekazanej instancji okna[cite: 9].
+  * **Dynamiczne menu motywów:** Iterowanie po słowniku `THEMES` z `themes.py` i tworzenie zaznaczalnych opcji wyboru motywu[cite: 8, 9].
+  * **Pomocnicza funkcja `_add_action`:** Czytelna rejestracja akcji wraz ze skrótami klawiszowymi (Ctrl+N, Ctrl+O, Ctrl+S, F5 itp.)[cite: 9].
 
 ### 8. `main_window.py` (Główne okno aplikacji)
-Moduł centralny, integrujący wszystkie pozostałe komponenty.
+Moduł centralny, integrujący wszystkie komponenty i kontrolujący stan okna[cite: 2, 6].
 * **Zadania:**
-  * Klasa `MkHTMLEditor` dziedzicząca po `QMainWindow`.
-  * Zarządzanie zakładkami (`QTabWidget`), otwieranie, zamykanie i przełączanie aktywnych kart.
-  * Przypisywanie odpowiednich lekserów (HTML/CSS) w zależności od rozszerzenia otwieranego pliku (metoda `update_lexer_for_editor`).
-  * Okna dialogowe z ostrzeżeniami (np. niezapisane zmiany).
-  * Współpraca z modułem `file_utils.py` przy operacjach wywoływanych przez użytkownika.
+  * Klasa `MkHTMLEditor` dziedzicząca po `QMainWindow`[cite: 2, 6].
+  * Zarządzanie zakładkami (`QTabWidget`), dodawanie, zamykanie i sprawdzanie stanu niezapisanych zmian[cite: 2, 6].
+  * Przypisywanie i resetowanie lekserów (`QsciLexerHTML`, `QsciLexerCSS`) na podstawie rozszerzenia otwieranego pliku oraz wybranego motywu[cite: 2, 6].
+  * Współpraca z modułem `file_utils.py` przy odczycie/zapisie plików i `config.py` przy zapisie stanu okna[cite: 2, 3, 5, 6].
+
+* **Zrobiono:**
+  Wyodrębniono klasę głównego okna aplikacji stanowiącą szkielet interfejsu użytkownika[cite: 2, 6].
+  * **Zarządzanie zakładkami:** Dodawanie nowych kart (`add_new_tab`), monitorowanie modyfikacji tekstu (`*` w tytule), obsługa okna dialogowego zapisu przy zamykaniu zakładek (`maybe_save_tab`)[cite: 2, 6].
+  * **Zarządzanie motywem i lexerami:** Metoda `update_lexer_for_editor()` nakładająca kolory z `themes.py` na lexery Scintilla HTML i CSS[cite: 2, 6, 8].
+  * **Integracja I/O:** Wywoływanie funkcji `read_text_file` oraz `_atomic_save` z pliku `file_utils.py`[cite: 5, 6].
+  * **Podgląd w przeglądarce:** Obsługa klawisza F5 i otwieranie aktywnego pliku HTML w domyślnej przeglądarce[cite: 6, 9].
 
 ---
 
 ## Korzyści z wdrożenia
 
-1. **Izolacja błędów:** Błąd w systemie zapisu plików (`file_utils.py`) nie wpłynie na rysowanie interfejsu (`main_window.py`).
-2. **Łatwiejsze wprowadzanie funkcji:** Dodanie nowej funkcji edytora (np. komentowanie skrótem klawiszowym) wymaga edycji tylko jednego, zwięzłego pliku `editor.py`.
-3. **Zwiększona czytelność:** Żaden pojedynczy plik nie powinien przekroczyć 300-400 linii kodu, co znacząco ułatwi jego analizę i pielęgnację.
+1. **Czystszy kod i łatwa konserwacja:** Żaden plik nie przekracza kilkuset linii kodu, co ułatwia czytanie i nawigację[cite: 2].
+2. **Izolacja odpowiedzialności:** Zmiany w wyglądzie menu (`ui_menu.py`) czy motywów (`themes.py`) nie naruszają logiki edytora (`editor.py`) ani operacji I/O (`file_utils.py`)[cite: 2, 4, 5, 8, 9].
+3. **Brak kolizji importów:** Ściśle zdefiniowane zależności kierunkowe eliminują błędy importu cyklicznego (*circular import*).

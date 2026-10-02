@@ -4,7 +4,23 @@ Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pli
 
 ---
 
-## [1.0.2.5 - 1.0.3.1-dev] - 2026-09-27
+## [1.0.3.2 - 1.0.3.4-dev]
+
+### 🏗️ Architektura i refaktoryzacja (Zakończenie modułaryzacji)
+* **Całkowite wydzielenie modułów:** Zakończono proces podziału monolitycznego kodu aplikacji na odrębne, wyspecjalizowane moduły zgodnie z wzorcem Separation of Concerns[cite: 2]. Architektura opiera się teraz na 8 niezależnych plikach[cite: 2]:
+ * `mkHTML.py` – odchudzony, najkrótszy skrypt pełniący funkcję punktu wejścia aplikacji, pozbawiony logiki biznesowej[cite: 2].
+ * `config.py` – moduł odpowiedzialny za środowisko, logowanie oraz odczyt/zapis ustawień w pliku konfiguracyjnym[cite: 2].
+ * `themes.py` – scentralizowana baza motywów wizualnych (w tym QSS) oraz palet kolorów dla lexerów[cite: 2].
+ * `file_utils.py` – "robotnik dyskowy" obsługujący operacje wejścia/wyjścia (`read_text_file`, `_atomic_save`), uniezależniony od interfejsu graficznego[cite: 2].
+ * `snippets.py` – statyczna baza autouzupełniania przechowująca szablony kodu (np. szkielet HTML) oraz zbiory tagów (np. `void_tags`)[cite: 2].
+ * `editor.py` – serce aplikacji dla edycji tekstu z klasą `MyCodeEditor`, obsługujące zdarzenia klawiatury i inteligentne formatowanie[cite: 2].
+ * `ui_menu.py` – moduł odpowiedzialny wyłącznie za kreację paska menu i podpinanie akcji (odciąża główne okno)[cite: 2].
+ * `main_window.py` – okno główne (`MkHTMLEditor`), integrujące komponenty, zarządzające zakładkami oraz przypisujące odpowiednie lexery[cite: 2].
+* Wersja 1.0.3.4 została oznaczona jako testowa.
+
+---
+
+## [1.0.2.5 - 1.0.3.1-dev]
 
 ### 🏗️ Architektura i refaktoryzacja (Major Refactoring)
 * **Rozbicie monolitu:** Zakończono proces podziału głównego, rozbudowanego pliku `mkHTML.py` na mniejsze, niezależne moduły o pojedynczej odpowiedzialności. Ułatwi to dalszy rozwój, testowanie oraz utrzymanie kodu.
