@@ -5,10 +5,11 @@ import webbrowser
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QFileDialog, QMessageBox, QTabWidget
+    QApplication, QMainWindow, QFileDialog, QMessageBox, QTabWidget,
+    QTabBar, QToolButton
 )
 from PyQt6.QtGui import QFont, QFontDatabase, QColor, QIcon
-from PyQt6.QtCore import QRect
+from PyQt6.QtCore import QRect, Qt
 from PyQt6.Qsci import QsciLexerHTML, QsciLexerCSS
 
 from config import APP_VERSION, get_desktop_path, load_config, save_config
@@ -35,7 +36,7 @@ class MkHTMLEditor(QMainWindow):
                 chosen_font = mf
                 break
         
-        self.font = QFont(chosen_font, 12)
+        self.editor_font = QFont(chosen_font, 12)
         
         self.setWindowTitle(f"mkHTML v{APP_VERSION}")
         
@@ -71,10 +72,17 @@ class MkHTMLEditor(QMainWindow):
         
         self.setGeometry(x, y, w, h)
         
+        # Przywrócenie stanu "zmaksymalizowane" (rozmiar normalny ustawiony powyżej
+        # zostaje zapamiętany przez Qt i wraca po wyjściu z maksymalizacji)
+        if self.config.get("maximized", False):
+            self.setWindowState(Qt.WindowState.WindowMaximized)
+        
         self.tabs = QTabWidget()
-        self.tabs.setTabsClosable(True)
-        self.tabs.tabCloseRequested.connect(self.close_tab)
+        # Własne przyciski zamykania kart (patrz _install_close_button),
+        # dzięki którym kolor "x" można ustawić osobno dla karty aktywnej i nieaktywnej.
+        self.tabs.setTabsClosable(False)
         self.tabs.currentChanged.connect(self.update_window_title)
+        self.tabs.currentChanged.connect(self.refresh_close_buttons)
         
         self.setCentralWidget(self.tabs)
         self.setStyleSheet(THEMES.get(self.current_theme, THEMES["jasny"]).get("app_qss", ""))
@@ -83,13 +91,18 @@ class MkHTMLEditor(QMainWindow):
         self.add_new_tab()
 
     def save_app_config(self):
-        geom = self.geometry()
+        # normalGeometry() zwraca rozmiar i położenie okna w stanie "normalnym",
+        # także gdy okno jest zmaksymalizowane lub zminimalizowane.
+        geom = self.normalGeometry()
+        if not geom.isValid():
+            geom = self.geometry()
         config_data = {
             "working_dir": self.working_dir,
             "x": geom.x(),
             "y": geom.y(),
             "width": geom.width(),
             "height": geom.height(),
+            "maximized": self.isMaximized(),
             "theme": self.current_theme
         }
         save_config(config_data)
@@ -101,8 +114,8 @@ class MkHTMLEditor(QMainWindow):
         """Dodaje nową zakładkę z konfiguracją kodowania i końców linii."""
         editor = MyCodeEditor()
         editor.setUtf8(True)
-        editor.setFont(self.font)
-        editor.setMarginsFont(self.font)
+        editor.setFont(self.editor_font)
+        editor.setMarginsFont(self.editor_font)
         editor.setMarginWidth(0, "0000")
         editor.setMarginLineNumbers(0, True)
         
@@ -124,9 +137,44 @@ class MkHTMLEditor(QMainWindow):
         
         title = os.path.basename(file_path) if file_path else "Nowy plik"
         index = self.tabs.addTab(editor, title)
+        self._install_close_button(editor)
         self.tabs.setCurrentIndex(index)
+        self.refresh_close_buttons()
         self.update_window_title()
         return editor
+
+    def _install_close_button(self, editor):
+        """Podpina do karty własny przycisk zamykania (stylowany w motywie: QToolButton#tabClose)."""
+        btn = QToolButton()
+        btn.setObjectName("tabClose")
+        btn.setText("\u00d7")
+        btn.setAutoRaise(True)
+        btn.setToolTip("Zamknij kartę")
+        btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.clicked.connect(lambda _checked=False, ed=editor: self._close_tab_of(ed))
+        self.tabs.tabBar().setTabButton(
+            self.tabs.indexOf(editor), QTabBar.ButtonPosition.RightSide, btn
+        )
+
+    def _close_tab_of(self, editor):
+        idx = self.tabs.indexOf(editor)
+        if idx != -1:
+            self.close_tab(idx)
+
+    def refresh_close_buttons(self, *_args):
+        """Oznacza przycisk aktywnej karty właściwością active=true (używa jej QSS motywu)."""
+        bar = self.tabs.tabBar()
+        current = self.tabs.currentIndex()
+        for i in range(self.tabs.count()):
+            btn = bar.tabButton(i, QTabBar.ButtonPosition.RightSide)
+            if btn is None:
+                continue
+            state = "true" if i == current else "false"
+            if btn.property("active") != state:
+                btn.setProperty("active", state)
+                btn.style().unpolish(btn)
+                btn.style().polish(btn)
 
     def on_modification_changed(self, editor, modified):
         idx = self.tabs.indexOf(editor)
@@ -155,7 +203,7 @@ class MkHTMLEditor(QMainWindow):
             for i in range(128):
                 lex.setColor(fg_color, i)
                 lex.setPaper(bg_color, i)
-                lex.setFont(self.font, i)
+                lex.setFont(self.editor_font, i)
 
         def set_color(lex, hex_color, cls_ref, *attrs):
             for attr in attrs:
@@ -174,7 +222,7 @@ class MkHTMLEditor(QMainWindow):
             set_color(lexer, html_colors["entity"], QsciLexerHTML, 'Entity')
             
             if hasattr(QsciLexerHTML, 'HTMLComment'):
-                comment_font = QFont(self.font)
+                comment_font = QFont(self.editor_font)
                 comment_font.setItalic(True)
                 lexer.setColor(QColor(html_colors["comment"]), QsciLexerHTML.HTMLComment)
                 lexer.setPaper(QColor(theme_data["bg"]), QsciLexerHTML.HTMLComment)
@@ -195,7 +243,7 @@ class MkHTMLEditor(QMainWindow):
             set_color(lexer, css_colors["pseudo"], QsciLexerCSS, 'PseudoClass')
             
             if hasattr(QsciLexerCSS, 'Comment'):
-                comment_font = QFont(self.font)
+                comment_font = QFont(self.editor_font)
                 comment_font.setItalic(True)
                 lexer.setColor(QColor(css_colors["comment"]), QsciLexerCSS.Comment)
                 lexer.setPaper(QColor(theme_data["bg"]), QsciLexerCSS.Comment)

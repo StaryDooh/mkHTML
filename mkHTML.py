@@ -4,18 +4,8 @@ import logging
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
-from config import LOG_FILE
+from config import LOG_FILE  # import konfiguruje też logowanie (config.py)
 from main_window import MkHTMLEditor
-
-# --- LOGOWANIE I OBSŁUGA BŁĘDÓW ---
-try:
-    logging.basicConfig(
-        filename=LOG_FILE, 
-        level=logging.ERROR,
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
-except OSError:
-    logging.basicConfig(level=logging.ERROR)
 
 
 def _excepthook(exc_type, exc, tb):

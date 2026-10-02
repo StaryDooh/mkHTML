@@ -4,6 +4,57 @@ Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pli
 
 ---
 
+---
+
+## [1.0.3.8-dev]
+
+### Dopracowanie motywów
+
+* Przeniesienie wyglądu okna do `themes.py` i połączenie wyglądu okna z aktualnym motywem.
+* Dopracowanie wyglądu motywów.
+
+---
+
+## [1.0.3.7-dev]
+
+### `self.font` nadpisywał metodę `QWidget.font()`
+
+* W `MkHTMLEditor.__init__` przypisanie `self.font = QFont(...)` zasłaniało metodę `Qt` na tej instancji.
+* Poprawiony `main_window.py`. Atrybut `self.font` nazywa się teraz `self.editor_font`, więc metoda `QWidget.font()` nie jest już zasłonięta.
+* Dodany motyw "Polarny".
+
+---
+
+## [1.0.3.6-dev]
+
+### Naprawienie problemu z uładem wielomonitorowym -  problem max(0, x) w load_config
+
+* Dodano zapisywanie osobno rozmiaru okna i flagi „zmaksymalizowane”. Poprawione pliki config.py i main_window.py.
+
+**config.py**
+
+* Usunięte `max(0, x)` i `max(0, y)`, więc ujemne położenie z drugiego monitora zostaje zachowane. Widoczność okna nadal sprawdza `main_window`.
+* Doszła walidacja `width` i `height`. Wartość mniejsza niż 400×300 (stałe `MIN_WINDOW_WIDTH` i `MIN_WINDOW_HEIGHT`) wraca do domyślnej.
+* Doszło pole `maximized` z domyślną wartością `False`. Jeśli w pliku jest cokolwiek innego niż `True/False`, zostaje `False`.
+* Stare pliki konfiguracji bez pola maximized działają bez problemu.
+
+**main_window.py (zmiany w trzech miejscach, reszta bez zmian)**
+
+* Import: `from PyQt6.QtCore import QRect, Qt`.
+* Zapis (`save_app_config`): zamiast `geometry()` używam `normalGeometry()`, które zwraca rozmiar i położenie „normalnego” okna także wtedy, gdy jest zmaksymalizowane lub zminimalizowane. Do konfiguracji trafia rozmiar sprzed maksymalizacji oraz `"maximized": self.isMaximized()`.
+* Odczyt (`__init__`): najpierw ustawiam zapamiętaną geometrię, a potem, jeśli `maximized` jest prawdą, stan `WindowMaximized`. Okno maksymalizuje się na monitorze, na którym leżała zapisana geometria, a po kliknięciu „przywróć” wraca do zapamiętanego rozmiaru.
+* Zapis działa tak samo przy zamknięciu programu i przy zmianie motywu, bo oba wołają `save_app_config`.
+
+---
+
+## [1.0.3.5-dev]
+
+### Usunięcie nieużywanych klas
+
+* `config.py` używał nieimportowanych klas. `_excepthook` w `config.py` wywoływał `QApplication` i `QMessageBox`, a oba nie są tam zaimportowane. Funkcja była martwa, bo hook ustawia `mkHTML.py`. Usunięta razem z kopią w mkHTML.py.
+
+---
+
 ## [1.0.3.2 - 1.0.3.4-dev]
 
 ### 🏗️ Architektura i refaktoryzacja (Zakończenie modułaryzacji)
