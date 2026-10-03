@@ -7,7 +7,7 @@ from PyQt6.QtCore import QStandardPaths
 from themes import THEMES
 
 # --- STAŁE APLIKACJI ---
-APP_VERSION = "1.0.3.8-dev"
+APP_VERSION = "1.0.3.12-dev"
 MIN_WINDOW_WIDTH = 400
 MIN_WINDOW_HEIGHT = 300
 LOG_FILE = os.path.join(os.path.expanduser("~"), ".mkhtml.log")

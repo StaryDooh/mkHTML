@@ -71,13 +71,20 @@ Moduł przechowujący komplet definicji wyglądu edytora i całej aplikacji. Wsz
 ### 4. `file_utils.py` (Operacje wejścia/wyjścia)
 „Robotnik dyskowy” (warstwa I/O), niezawierający logiki interfejsu graficznego.
 * **Zadania:**
-  * Funkcja `read_text_file(path)`: odczyt plików, wykrywanie kodowania, weryfikacja bajtów NUL (pliki binarne), normalizacja znaków końca linii (EOL).
+  * Funkcja `read_text_file(path)`: odczyt plików, wykrywanie kodowania (BOM, deklaracja w pliku, UTF-8, CP1250), weryfikacja bajtów NUL (pliki binarne), normalizacja znaków końca linii (EOL).
   * Funkcja `_atomic_save(...)`: bezpieczny zapis do pliku z wykorzystaniem plików tymczasowych i `os.fsync`, chroniący przed utratą danych.
 
 * **Zrobiono:**
   Moduł wyodrębniony jako warstwa I/O, niewykorzystująca widgetów ani okien PyQt6. Jedyną zależnością od biblioteki QScintilla jest import `QsciScintilla`, potrzebny do zwrócenia trybu EOL (`EolMode`) oraz zdefiniowania słownika mapowania EOL.
-  * **Odczyt plików (`read_text_file`):** Wykrywanie plików binarnych (bajt NUL w pierwszych 8 KB), obsługa kodowania UTF-8 (z obsługą BOM) oraz CP1250, detekcja i normalizacja znaków EOL (CRLF / LF).
-  * **Bezpieczny zapis (`_atomic_save`):** Zapis atomowy przez pliki tymczasowe (`tempfile.mkstemp`), `os.fsync` wymuszający zrzut na dysk, zachowanie uprawnień istniejącego pliku (`shutil.copymode`) oraz pętla powtórzeń chroniąca przed blokadami plików w Windows (`PermissionError`).
+  * **Odczyt plików (`read_text_file`):** Wykrywanie plików binarnych (bajt NUL w pierwszych 8 KB), dobór kodowania (opis niżej), detekcja i normalizacja znaków EOL (CRLF / LF).
+  * **Wykrywanie kodowania:** Funkcja `_candidate_encodings()` ustala kolejność prób dekodowania, a `_declared_encoding()` odczytuje kodowanie zadeklarowane w pierwszych 4 KB pliku: `<meta charset="...">`, `<meta http-equiv="Content-Type" content="...; charset=...">` lub `@charset "...";` w pliku CSS. Aliasy (np. `latin2`) są rozpoznawane, a deklaracje nieznane lub niezgodne z ASCII (np. UTF-16) ignorowane. Kolejność wyboru:
+    * plik z BOM UTF-8 jest czytany jako `utf-8-sig` (z awaryjną próbą CP1250),
+    * plik z polskimi znakami bez BOM: najpierw poprawny UTF-8 (ma pierwszeństwo także przed nieaktualną deklaracją w pliku), następnie kodowanie zadeklarowane w pliku (np. ISO-8859-2), na końcu CP1250,
+    * czysty ASCII: zachowywane jest kodowanie zadeklarowane w pliku, a w razie jego braku UTF-8 (deklaracja `us-ascii` traktowana jest jak UTF-8).
+    Wykryte kodowanie jest zwracane do okna głównego i używane przy zapisie, więc plik w ISO-8859-2 zostanie zapisany ponownie w ISO-8859-2.
+  * **Bezpieczny zapis (`_atomic_save`):** Zapis atomowy przez pliki tymczasowe (`tempfile.mkstemp`), `os.fsync` wymuszający zrzut na dysk oraz pętla powtórzeń chroniąca przed blokadami plików w Windows (`PermissionError`).
+  * **Uprawnienia plików:** Istniejący plik zachowuje swoje uprawnienia (`shutil.copymode`). Nowy plik dostaje uprawnienia zgodne z `umask` (`_default_file_mode()`), zamiast restrykcyjnego `0600` nadawanego przez `mkstemp`. W systemie Windows ma to znikome znaczenie.
+  * **Zapis awaryjny:** Jeśli w katalogu nie da się utworzyć pliku tymczasowego (np. katalog tylko do odczytu), a sam plik jest zapisywalny, `_write_in_place()` zapisuje go bezpośrednio. Tekst jest kodowany przed otwarciem pliku, więc błąd kodowania nie obcina zawartości na dysku.
 
 ### 5. `snippets.py` (Baza autouzupełniania)
 Moduł z danymi statycznymi wspierającymi pisanie kodu.
@@ -133,14 +140,20 @@ Moduł centralny, integrujący wszystkie komponenty i kontrolujący stan okna.
 * **Zrobiono:**
   Wyodrębniono klasę głównego okna aplikacji stanowiącą szkielet interfejsu użytkownika.
   * **Zarządzanie zakładkami:** Dodawanie nowych kart (`add_new_tab`), monitorowanie modyfikacji tekstu (`*` w tytule), obsługa okna dialogowego zapisu przy zamykaniu zakładek (`maybe_save_tab`).
-  * **Przyciski zamykania kart:** Zakładki nie używają wbudowanego przycisku Qt. Każda karta ma własny przycisk `QToolButton` (`_install_close_button`) o nazwie obiektu `tabClose`. Metoda `refresh_close_buttons()` oznacza przycisk karty aktywnej właściwością `active=true`, dzięki czemu motyw może nadać „×” inny kolor na karcie aktywnej niż na nieaktywnych. Przycisk wywołuje to samo `close_tab`, więc pytanie o zapis działa jak dotychczas.
+  * **Przyciski zamykania kart:** Zakładki nie używają wbudowanego przycisku Qt. Każda karta ma własny przycisk `QToolButton` (`_install_close_button`) o nazwie obiektu `tabClose`. Metoda `refresh_close_buttons()` oznacza przycisk karty aktywnej właściwością `active=true`, dzięki czemu motyw może nadać „×” inny kolor na karcie aktywnej niż na nieaktywnych. Przycisk wywołuje to samo `close_tab` (przez `_close_tab_of`), więc pytanie o zapis działa jak dotychczas.
   * **Zarządzanie motywem i lexerami:** Metoda `update_lexer_for_editor()` nakładająca kolory z `themes.py` na lexery Scintilla HTML i CSS. Zmiana motywu (`set_theme`) podstawia nowy arkusz `app_qss` całemu oknu, odświeża lexery wszystkich kart i zapisuje konfigurację.
   * **Czcionka edytora:** Przechowywana w atrybucie `editor_font` (nazwa nie koliduje z metodą `QWidget.font()`).
   * **Stan okna:** Zapis używa `normalGeometry()`, czyli rozmiaru okna w stanie normalnym, także gdy okno jest zmaksymalizowane lub zminimalizowane, oraz flagi `isMaximized()`. Przy starcie przywracana jest zapamiętana geometria (z kontrolą widoczności na dostępnych ekranach), a następnie, jeśli trzeba, stan zmaksymalizowany. Po wyjściu z maksymalizacji okno wraca do zapamiętanego rozmiaru.
-  * **Integracja I/O:** Wywoływanie funkcji `read_text_file` oraz `_atomic_save` z pliku `file_utils.py`.
+  * **Integracja I/O:** Wywoływanie funkcji `read_text_file` oraz `_atomic_save` z pliku `file_utils.py`. Kodowanie wykryte przy odczycie jest przechowywane w edytorze (`file_encoding`) i używane przy zapisie. Gdy tekstu nie da się zapisać w tym kodowaniu, program proponuje zmianę na UTF-8.
   * **Podgląd w przeglądarce:** Obsługa klawisza F5 i otwieranie aktywnego pliku HTML w domyślnej przeglądarce.
 
 ---
+
+## Założenia i świadome ograniczenia
+
+1. **Platforma docelowa:** Program jest kompilowany (PyInstaller) i instalowany wyłącznie w systemie Windows. Rozwiązania przenośne (np. obsługa `umask` czy uprawnień plików) są obecne w kodzie, ale na Windows nie mają praktycznego znaczenia.
+2. **Końce linii:** Normalizowane są końce linii CRLF i LF. Pliki ze starym końcem linii `\r` (dawne systemy Mac) nie są normalizowane. Jest to świadoma decyzja, wynikająca z przeznaczenia programu na Windows. Wartość `EolMac` występuje w słowniku mapowania EOL, ale nie jest nigdy wybierana przy odczycie pliku.
+3. **Wykrywanie kodowania:** Deklaracji kodowania w pliku nie da się zweryfikować. Plik z błędną deklaracją (np. `windows-1250` dla treści w ISO-8859-2) zostanie odczytany zgodnie z deklaracją.
 
 ## Korzyści z wdrożenia
 

@@ -4,6 +4,49 @@ Wszystkie znaczące zmiany w projekcie **mkHTML** będą dokumentowane w tym pli
 
 ---
 
+## [1.0.3.12-dev]
+
+### Poprawiony zapis w `main_window.py`. 
+
+* Co się zmieniło:
+  * Nowa metoda `_write_editor_to(editor, file_path)`. Cała obsługa zapisu i błędów kodowania jest w jednym miejscu i działa w pętli, bez wywoływania samej siebie.
+  * Zmiana kodowania na UTF-8. Gdy tekstu nie da się zapisać w kodowaniu pliku, program pyta o zmianę na UTF-8 i ponawia zapis. Jeśli nie uda się także w UTF-8 (np. przy osieroconym surrogacie), pokazuje jeden komunikat z prośbą o usunięcie problematycznych znaków i kończy zapis.
+  * Przy niepowodzeniu kodowanie wraca do poprzedniego. Wcześniej odpowiedź „Tak” zostawiała edytor w UTF-8 nawet wtedy, gdy zapis i tak się nie udał.
+  * `save_file` i `save_file_as` są krótsze. Usunąłem też hack `save_file_as(self, *args)`, który służył tylko rekurencji. Menu i `run_in_browser` wołają tę metodę bez argumentów, więc nic się nie zmienia.
+  * Nowa metoda `_mark_saved`. Odświeża tytuł karty i okna po zapisie. Ten kod był wcześniej zduplikowany.
+
+---
+
+## [1.0.3.11-dev]
+
+### Naprawienie błędu polegającego na czytaniu kodowania ISO-8859-2 jako cp1250 bez ostrzeżenia. 
+
+* Jak teraz wykrywane jest kodowanie:
+  * BOM UTF-8. Plik z BOM jest czytany jako UTF-8 (z awaryjną próbą cp1250), tak jak dotychczas.
+  * Plik z polskimi znakami bez BOM. Najpierw sprawdzam, czy to poprawny UTF-8. Jeśli tak, zostaje UTF-8 nawet wtedy, gdy plik deklaruje inne kodowanie. Poprawny UTF-8 z polskimi znakami praktycznie nie zdarza się przypadkiem w pliku 8-bitowym, a nieaktualne deklaracje w starych stronach są częste.
+  * Kodowanie zadeklarowane w pliku. Jeśli to nie UTF-8, używam deklaracji z `<meta charset="...">`, z `<meta http-equiv=... content="...; charset=...">` albo `@charset "...";` w pliku CSS. Szukam w pierwszych 4 KB, a aliasy typu latin2 są rozpoznawane.
+  * Brak deklaracji. Jak dotychczas wybierane jest Windows-1250.
+  * Czysty ASCII. Zostaje zadeklarowane kodowanie, jeśli jest. Dzięki temu zapis nie zmienia kodowania pliku, który tak się przedstawia.* 
+
+---
+
+## [1.0.3.10-dev]
+
+### Poprawienie błędu: nowe pliki na Linuksie/macOS dostawały uprawnienia 0600. `tempfile.mkstemp` tworzył plik z 0600, a `copymode` działał tylko, gdy cel już istniał. Pierwszy zapis nowego pliku dawał plik nieczytelny dla innych. 
+
+* Poprawiopno '_atomic_save' w 'file_utils.py'.
+* Uprawnienia nowych plików. Dla pliku, który jeszcze nie istnieje, kod ustawia teraz `0o666 & ~umask`, czyli zwykle 0644. Robi to nowa funkcja pomocnicza `_default_file_mode()`, która odczytuje bieżące `umask`. Istniejące pliki nadal zachowują swoje uprawnienia przez `copymode`.
+* Katalog tylko do odczytu. Jeśli `mkstemp` nie może utworzyć pliku tymczasowego, ale sam plik istnieje i jest zapisywalny, następuje zapis bezpośredni do pliku. Robi to nowa funkcja `_write_in_place`. Tekst jest kodowany przed otwarciem pliku, więc błąd kodowania nie obcina zawartości na dysku. Ten zapis nie jest atomowy, ale to rozsądny kompromis, bo inaczej zapis w ogóle by się nie udał. Gdy pliku nie ma albo nie można go zapisać, nadal zgłaszany jest oryginalny `PermissionError`, więc użytkownik zobaczy zwykły komunikat o błędzie.
+
+---
+
+## [1.0.3.9-dev]
+
+### Poprawienie błędu: auto-dopisanie rozszerzenia omijało pytanie o nadpisanie. W 'save_file_as' użytkownik wpisuje "strona" i dialog nie widział kolizji, bo plik "strona.html" jeszcze nie istniał 
+
+* Naprawienie błędu polegającego na tym, że auto-dopisanie rozszerzenia omijało pytanie o nadpisanie.
+* Poprawiony `save_file_as` w `main_window.py`. Gdy kod dopisuje rozszerzenie (.html lub .css według filtra dialogu), a plik o takiej nazwie już istnieje, pojawia się pytanie „Plik … już istnieje. Czy chcesz go zastąpić?”. Domyślnym przyciskiem jest Nie. Po odpowiedzi „Nie” zapis jest przerwany i metoda zwraca `False`, jak przy anulowaniu dialogu. Nic nie zostaje nadpisane. 
+
 ---
 
 ## [1.0.3.8-dev]
